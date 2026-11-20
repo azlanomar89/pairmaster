@@ -136,6 +136,7 @@ th { color: var(--muted); font-weight: 600; }
 
 <h2 id="tou">10. AuPair and ratings</h2>
 <p>PairMaster reads and writes AuPair 6.16 <code>.TOU</code> files exactly as AuPair does, so you can move a tournament between the two at any point, and send the file to your ratings officer as before.</p>
+<p><b>Before switching to AuPair mid-event</b>, make sure no game says “Needs an opponent”: give that player a pairing or a result first. AuPair itself garbles that marker when it reopens a file.</p>
 <p>Before sending it for ratings, open <b>Print → Tools → Clean markers</b> to remove <code>@12</code>, <code>@R</code> and <code>(…)</code> notes from names.</p>
 <p>If you open a damaged <code>.TOU</code> file, PairMaster lists the problems it found (for example “opponent number 99 does not exist”) before opening it, and marks those games “Needs an opponent” so you can fix them.</p>
 
@@ -149,7 +150,7 @@ th { color: var(--muted); font-weight: 600; }
 <h3>Is my data sent anywhere?</h3>
 <p>No. PairMaster has no server and is blocked from making any internet connection. Your tournament stays on your computer.</p>
 
-<p class="lead" style="margin-top:48px">PairMaster 1.0 by Mohamad Azlan Omar · free software under the MIT licence. Not affiliated with the authors of AuPair or TSH.</p>
+<p class="lead" style="margin-top:48px">PairMaster 1.0.1 by Mohamad Azlan Omar · free software under the MIT licence. Not affiliated with the authors of AuPair or TSH.</p>
 </main>
 </body>
 </html>

@@ -6,7 +6,8 @@ so it fits into the existing ratings workflow.
 
 ## Download and run
 
-1. Download `PairMaster-1.0.zip` and unzip it, or download `PairMaster.html` on its own.
+1. Download the latest `PairMaster-x.y.zip` from the [Releases](../../releases/latest) page and unzip it,
+   or download `PairMaster.html` on its own.
 2. Double-click `PairMaster.html`. It opens in your browser; nothing is installed and no internet is needed.
 3. Use **Google Chrome** or **Microsoft Edge** for the best experience (they let PairMaster save
    into a folder you choose). Safari and Firefox work too, but saved files go to Downloads.
@@ -32,6 +33,12 @@ Read the [user guide](guide.html) (also linked from **Help** inside the app).
 PairMaster's standings were compared with AuPair's own `touprint` program on thousands of random
 tournaments and with TSH 3.340 on hundreds more, with the same results. Its draws were stress-tested
 up to 500 players and 60-player, 59-round events.
+
+## Versions
+
+- **1.0.1**: `.TOU` files now match AuPair 6.16 exactly in every case found by round trips through AuPair itself:
+  a player left without an opponent in a division of 10+ players, opponents numbered 100+, and byes.
+- **1.0**: first public release.
 
 ## Licence
 

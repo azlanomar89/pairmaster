@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UFrLj3OtH7kzlA6PVi3gnaNYNnlyzFgbzw0vMZds5jg='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-U+njz9T+2CKsRLFCmsGo/9OGNsNcGvQIj5lV35u15Bw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>PairMaster</title>
 <style>
 :root {
@@ -106,7 +106,7 @@ table.wall td.w { font-weight: 600; }
 </head>
 <body>
 <header class="topbar no-print">
-  <div class="brand">PairMaster <span class="version">1.0</span></div>
+  <div class="brand">PairMaster <span class="version">1.0.1</span></div>
   <div class="event" id="event-label"></div>
   <div class="spacer"></div>
   <span class="saved" id="saved-label"></span>
@@ -379,19 +379,37 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   function gameField(sec, p, round) {
     var g = sec.players[p].games[round - 1];
     if (!g) return ' ' + padLeft(2, 4) + padLeft(p + 1, 4);
-    if (g.rawOpp) { // "needs an opponent" marker, kept as AuPair writes it; always space-separated from the score
-      return ' ' + padLeft(g.rawField !== undefined ? g.rawField : g.score, 4) + (g.rawOpp.length >= 4 ? ' ' + g.rawOpp : padLeft(g.rawOpp, 4));
+    if (g.rawOpp) { // "needs an opponent" marker, kept as AuPair writes it (4 columns, touching the result if 4 wide)
+      if (g.rawText !== undefined) return g.rawText; // read from a file: written back character for character
+      return ' ' + padLeft(g.rawField !== undefined ? g.rawField : g.score, 4) + padLeft(g.rawOpp, 4);
     }
     if (g.opp === p) {
-      // As AuPair writes them: a bye/designated win is 1 until the round is finished, then 2001;
-      // a designated draw is a half game with a notional 350; a designated loss is 2.
-      var code = g.nongame === 'W' ? (PM.isRoundComplete(sec, round) ? 2001 : 1) : g.nongame === 'L' ? 2 : 1000 + g.score;
+      // As AuPair writes them: a bye/designated win is 2001 (AuPair shows 1 only for a bye it has just drawn, and
+      // a 1 read from such a file is kept until the round is finished); a designated draw is a half game with a
+      // notional 350; a designated loss is 2. Checked by round trips through AuPair 6.16 (tests/fixtures).
+      var code = g.nongame === 'W' ? (g.code && !PM.isRoundComplete(sec, round) ? g.code : 2001)
+        : g.nongame === 'L' ? 2 : 1000 + g.score;
       return ' ' + padLeft(code, 4) + padLeft(p + 1, 4);
     }
     var res = PM.gameResult(sec, p, round);
     var flag = !res ? 0 : res.win === 1 ? 2 : res.win === 0.5 ? 1 : 0;
     var opp = g.first ? '+' + (g.opp + 1) : String(g.opp + 1);
-    return ' ' + padLeft(flag * 1000 + g.score, 4) + (opp.length >= 4 ? ' ' + opp : padLeft(opp, 4));
+    return ' ' + padLeft(flag * 1000 + g.score, 4) + padLeft(opp, 4); // AuPair reads fixed columns: never add a space
+  }
+
+  // AuPair writes each game as " %4d%4d", so a 4-wide opponent such as "+-11" or "+101" touches the result
+  // ("   0+-11", " 2400+101"). A result is never negative, so where a token has digits followed by + or -,
+  // the opponent starts at that sign. This also reads PairMaster 1.0 files, which put a space there.
+  // Returns the tokens and, for each, its exact text in the line (with the spaces before it).
+  function gameTokens(rest) {
+    var out = [], raw = [];
+    (rest.replace(/\s+$/, '').match(/\s*\S+/g) || []).forEach(function (piece) {
+      var m = /^(\s*)(\d+)([+-].*)$/.exec(piece);
+      if (m) { out.push(m[2], m[3]); raw.push(m[1] + m[2], m[3]); }
+      else { out.push(piece.trim()); raw.push(piece); }
+    });
+    out.raw = raw;
+    return out;
   }
 
   PM.writeTou = function (t) {
@@ -444,22 +462,25 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       var p = sec.players.length;
       var pl = { name: line.slice(0, 20).replace(/\s+$/, ''), missing: false, games: [] };
       sec.players.push(pl);
-      var tok = line.slice(20).trim().split(/\s+/).filter(Boolean);
+      var tok = gameTokens(line.slice(20));
       for (var k = 0; k + 1 < tok.length; k += 2) {
         var field = Math.max(0, parseInt(tok[k], 10) || 0);
         var first = tok[k + 1].charAt(0) === '+';
         var score = field % 1000;
+        var rawText = tok.raw[k] + tok.raw[k + 1];
         if (!/^\+?\d+$/.test(tok[k + 1])) { // e.g. "+-4": AuPair removed this player's opponent
-          pl.games.push({ opp: p, score: score, first: false, nongame: null, rawOpp: tok[k + 1] });
+          pl.games.push({ opp: p, score: score, first: false, nongame: null, rawOpp: tok[k + 1], rawText: rawText });
           continue;
         }
         var opp = parseInt(tok[k + 1], 10) - 1;
         if (opp === p) {
           var kind = (score === 1 || score === 3 || score === 5) ? 'W'
             : (score === 2 || score === 4 || score === 6) ? 'L' : 'D';
-          pl.games.push({ opp: p, score: kind === 'D' ? score : 0, first: false, nongame: kind });
+          var ng = { opp: p, score: kind === 'D' ? score : 0, first: false, nongame: kind };
+          if (kind === 'W' && field < 1000) ng.code = field; // a bye shown as 1 by AuPair: keep it until the round ends
+          pl.games.push(ng);
         } else {
-          pl.games.push({ opp: opp, score: score, first: first, nongame: null, _tok: tok[k + 1], _field: tok[k] });
+          pl.games.push({ opp: opp, score: score, first: first, nongame: null, _tok: tok[k + 1], _field: tok[k], _raw: rawText });
         }
       }
     }
@@ -480,10 +501,10 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       });
       bad.forEach(function (b) {
         var g = s.players[b[0]].games[b[1]];
-        s.players[b[0]].games[b[1]] = { opp: b[0], score: g.score, first: false, nongame: null, rawOpp: g._tok, rawField: g._field };
+        s.players[b[0]].games[b[1]] = { opp: b[0], score: g.score, first: false, nongame: null, rawOpp: g._tok, rawField: g._field, rawText: g._raw };
         PM.lastParseWarnings.push(s.name + ': ' + s.players[b[0]].name + ', round ' + (b[1] + 1) + ': ' + b[2]);
       });
-      s.players.forEach(function (pl) { pl.games.forEach(function (g) { if (g) { delete g._tok; delete g._field; } }); });
+      s.players.forEach(function (pl) { pl.games.forEach(function (g) { if (g) { delete g._tok; delete g._field; delete g._raw; } }); });
     });
     t.sections.forEach(function (s) {
       var last = PM.roundsDrawn(s);
