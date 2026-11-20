@@ -1,0 +1,1800 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UFrLj3OtH7kzlA6PVi3gnaNYNnlyzFgbzw0vMZds5jg='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<title>PairMaster</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #dedcd5;
+  --accent: #1f6f5c; --accent-ink: #ffffff; --accent-soft: #e3f0ec; --warn: #a24b0b; --warn-soft: #fbeedd;
+  --win: #1f6f5c; --loss: #9b2c2c; --row: #faf9f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --panel: #212226; --ink: #ececee; --muted: #9a9aa2; --line: #36373c;
+    --accent: #5cc2a5; --accent-ink: #0d1f1a; --accent-soft: #1e3530; --warn: #f0a35e; --warn-soft: #3a2a1a;
+    --win: #5cc2a5; --loss: #f08a8a; --row: #1c1d20;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.danger { color: var(--loss); }
+button.small { padding: 2px 8px; font-size: 13px; }
+button:disabled { opacity: .45; cursor: default; }
+input, select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.topbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { font-weight: 700; letter-spacing: .2px; color: var(--accent); }
+.event { color: var(--muted); }
+.spacer { flex: 1; }
+.saved { color: var(--muted); font-size: 13px; }
+.version { color: var(--muted); font-weight: 400; font-size: 12px; }
+.help { color: var(--accent); font-size: 14px; text-decoration: none; }
+.help:hover { text-decoration: underline; }
+.banner { background: var(--warn-soft); color: var(--warn); padding: 8px 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-wrap: wrap; }
+.tabs button { border-radius: 8px 8px 0 0; border-bottom: none; }
+.tabs button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.sections { display: flex; gap: 6px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; align-items: center; }
+.sections .chip { border-radius: 999px; }
+.sections .chip.active { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+main { padding: 16px; max-width: 1100px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.card h2 { margin: 0 0 10px; font-size: 16px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.row label { color: var(--muted); font-size: 13px; }
+.hint { color: var(--muted); font-size: 13px; }
+table { border-collapse: collapse; width: 100%; }
+th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:nth-child(even) td { background: var(--row); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.score { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.name-input { width: 100%; min-width: 180px; }
+.starter { color: var(--accent); font-weight: 700; width: 14px; display: inline-block; }
+.win { color: var(--win); font-weight: 600; }
+.loss { color: var(--loss); }
+.result { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); font-size: 12px; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.missing td { opacity: .55; }
+.actions { white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+#print-area { display: none; }
+@media print {
+  .no-print, main { display: none !important; }
+  body { background: #fff; color: #000; font-size: 12pt; }
+  #print-area { display: block; }
+  #print-area h1 { font-size: 18pt; margin: 0 0 4px; }
+  #print-area h2 { font-size: 13pt; margin: 0 0 10px; font-weight: normal; }
+  #print-area table { width: auto; }
+  #print-area td, #print-area th { border-bottom: 1px solid #ccc; padding: 3px 10px; background: none !important; color: #000; }
+  .page-break { page-break-before: always; }
+}
+.preview { background: #fff; color: #000; border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.preview h1 { font-size: 20px; margin: 0 0 4px; }
+.preview h2 { font-size: 15px; margin: 0 0 10px; font-weight: normal; }
+.preview table { width: auto; }
+.preview td, .preview th { background: none !important; color: #000; border-bottom: 1px solid #ddd; }
+details.gib { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+details.gib summary { cursor: pointer; }
+details.gib .row label { color: var(--ink); font-size: 14px; }
+.preview { overflow-x: auto; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.scorecard { border: 1px solid #999; border-radius: 6px; padding: 8px 10px; break-inside: avoid; page-break-inside: avoid; }
+.scorecard .sc-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.scorecard .sc-sub { font-size: 11px; color: #555; margin-bottom: 4px; }
+.scorecard table { width: 100%; font-size: 11px; }
+.scorecard td, .scorecard th { padding: 2px 4px !important; }
+table.wall { font-size: 11px; }
+table.wall td, table.wall th { padding: 2px 5px !important; white-space: nowrap; border: 1px solid #bbb !important; }
+table.wall td.w { font-weight: 600; }
+@media print {
+  .cards { gap: 8px; }
+  table.wall { font-size: 8.5pt; }
+}
+
+</style>
+</head>
+<body>
+<header class="topbar no-print">
+  <div class="brand">PairMaster <span class="version">1.0</span></div>
+  <div class="event" id="event-label"></div>
+  <div class="spacer"></div>
+  <span class="saved" id="saved-label"></span>
+  <a class="help" href="guide.html" target="_blank" rel="noopener" title="User guide (guide.html, next to this file)">Help</a>
+  <button id="btn-new">New</button>
+  <button id="btn-folder" class="small" hidden title="Folder where .TOU files are saved"></button>
+  <button id="btn-open">Open .TOU</button>
+  <button id="btn-save" class="primary">Save .TOU</button>
+  <input type="file" id="file-input" accept=".tou,.TOU,text/plain" hidden>
+</header>
+<div id="banner" class="banner no-print" hidden></div>
+<nav class="tabs no-print" id="tabs">
+  <button data-tab="players">Players</button>
+  <button data-tab="round">Rounds &amp; scores</button>
+  <button data-tab="standings">Standings</button>
+  <button data-tab="print">Print</button>
+</nav>
+<div class="sections no-print" id="section-bar"></div>
+<main id="main"></main>
+<div id="print-area"></div>
+<script>
+// PairMaster — tournament data model, results and standings.
+// Data shapes:
+//   Tournament { date:'DD.MM.YYYY', title, rankMethod:'M'|'A', sections:[Section] }
+//   Section    { name, highWord:{text, score}, players:[Player] }
+//   Player     { name, missing:boolean, games:[Game] }   // games[round-1]
+//   Game       { opp:index (own index => nongame), score, first:boolean, nongame:null|'W'|'L'|'D' }
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+
+  PM.MIN_SCORE = 10; // touprint treats a score under 10 as "not entered yet"
+
+  PM.newTournament = function (date, title, rankMethod) {
+    return { date: date || '', title: title || '', rankMethod: rankMethod === 'A' ? 'A' : 'M', sections: [] };
+  };
+
+  PM.addSection = function (t, name) {
+    var s = { name: name, highWord: { text: '', score: 0 }, players: [] };
+    t.sections.push(s);
+    return s;
+  };
+
+  PM.addPlayer = function (sec, name) {
+    var drawn = PM.roundsDrawn ? PM.roundsDrawn(sec) : 0;
+    var p = { name: name, missing: false, games: [] };
+    sec.players.push(p);
+    var idx = sec.players.length - 1;
+    for (var r = 0; r < drawn; r++) p.games[r] = { opp: idx, score: 0, first: false, nongame: 'L' };
+    return p;
+  };
+
+  PM.displayName = function (name) {
+    return String(name).replace(/@\S+/g, '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  };
+
+  PM.game = function (sec, p, round) {
+    return sec.players[p] ? sec.players[p].games[round - 1] || null : null;
+  };
+
+  // Put players a and b against each other in a round. aFirst: a starts.
+  PM.pairGame = function (sec, round, a, b, aFirst) {
+    sec.players[a].games[round - 1] = { opp: b, score: 0, first: !!aFirst, nongame: null };
+    sec.players[b].games[round - 1] = { opp: a, score: 0, first: !aFirst, nongame: null };
+  };
+
+  PM.setScore = function (sec, round, p, score) {
+    var g = PM.game(sec, p, round);
+    if (!g) throw new Error('No game drawn for this player in round ' + round);
+    if (g.opp === p) throw new Error('This is a nongame (bye/designated result) - it has no score');
+    g.score = Math.max(0, Math.min(999, Math.round(Number(score) || 0)));
+  };
+
+  // Designated win/loss/draw (also used for byes). As in AuPair, an existing opponent is
+  // left without an opponent and without a result (written "-N", N = players + 1) until
+  // the tournament director re-pairs them or gives them a result. Nothing is awarded automatically.
+  PM.setNongame = function (sec, round, p, kind) {
+    var g = PM.game(sec, p, round);
+    if (g && g.opp !== p) {
+      var q = g.opp, og = sec.players[q].games[round - 1];
+      sec.players[q].games[round - 1] = {
+        opp: q, score: og.score, first: false, nongame: null,
+        rawOpp: (og.first ? '+' : '') + '-' + (sec.players.length + 1)
+      };
+    }
+    sec.players[p].games[round - 1] = { opp: p, score: kind === 'D' ? 350 : 0, first: false, nongame: kind };
+  };
+
+  PM.isPlayed = function (sec, p, round) {
+    var g = PM.game(sec, p, round);
+    if (!g || g.opp === p) return false;
+    var og = PM.game(sec, g.opp, round);
+    return g.score >= PM.MIN_SCORE && !!og && og.score >= PM.MIN_SCORE;
+  };
+
+  // Result of one round for one player, or null if nothing to count yet.
+  PM.gameResult = function (sec, p, round) {
+    var g = PM.game(sec, p, round);
+    if (!g) return null;
+    if (g.opp === p) {
+      if (g.rawOpp) return null; // AuPair left this player without an opponent: needs a pairing
+      var k = g.nongame || 'D';
+      return {
+        win: k === 'W' ? 1 : k === 'D' ? 0.5 : 0,
+        spread: k === 'W' ? 1 : 0,
+        score: k === 'D' ? g.score : 0, // notional half-game score (AuPair uses 350), counted in total score
+        played: false, nongame: true, kind: k
+      };
+    }
+    if (!PM.isPlayed(sec, p, round)) return null;
+    var os = PM.game(sec, g.opp, round).score;
+    return {
+      win: g.score > os ? 1 : g.score === os ? 0.5 : 0,
+      spread: g.score - os, score: g.score, played: true, nongame: false
+    };
+  };
+
+  PM.roundsDrawn = function (sec) {
+    var n = 0;
+    sec.players.forEach(function (pl) { if (pl.games.length > n) n = pl.games.length; });
+    return n;
+  };
+
+  PM.isRoundComplete = function (sec, round) {
+    if (!sec.players.length) return false;
+    for (var p = 0; p < sec.players.length; p++) {
+      if (!PM.gameResult(sec, p, round)) return false;
+    }
+    return true;
+  };
+
+  PM.roundsComplete = function (sec) {
+    var r = 0, drawn = PM.roundsDrawn(sec);
+    while (r < drawn && PM.isRoundComplete(sec, r + 1)) r++;
+    return r;
+  };
+
+  PM.missingResults = function (sec, round) {
+    var out = [];
+    sec.players.forEach(function (pl, p) {
+      var g = pl.games[round - 1];
+      if (!g) { out.push(p); return; }
+      if (g.rawOpp || (g.opp !== p && g.score < PM.MIN_SCORE)) out.push(p);
+    });
+    return out;
+  };
+
+  PM.standings = function (t, sec, upToRound) {
+    if (upToRound === undefined || upToRound === null) upToRound = PM.roundsComplete(sec);
+    var rows = sec.players.map(function (pl, p) {
+      var r = { idx: p, wins: 0, losses: 0, spread: 0, total: 0, byes: 0, byeWins: 0, byeSpread: 0, games: 0 };
+      for (var round = 1; round <= upToRound; round++) {
+        var res = PM.gameResult(sec, p, round);
+        if (!res) continue;
+        r.wins += res.win; r.losses += 1 - res.win; r.spread += res.spread; r.total += res.score;
+        if (res.nongame) { r.byes++; r.byeWins += res.win; r.byeSpread += res.spread; }
+        else r.games++;
+      }
+      return r;
+    });
+    var key = t.rankMethod === 'A' ? 'total' : 'spread';
+    rows.sort(function (a, b) {
+      return (b.wins - a.wins) || (b[key] - a[key]) || (a.idx - b.idx);
+    });
+    rows.forEach(function (r, i) { r.rank = i + 1; });
+    return rows;
+  };
+
+  // Results of one round: games first (higher-ranked player as "a"), then byes/designated results.
+  PM.roundResults = function (t, sec, round) {
+    var games = [], nongames = [], seen = {};
+    PM.standings(t, sec, Math.max(0, round - 1)).forEach(function (row) {
+      var p = row.idx, g = PM.game(sec, p, round);
+      if (!g || seen[p]) return;
+      seen[p] = true;
+      if (g.opp === p) {
+        nongames.push({ a: p, b: null, aScore: 0, bScore: 0, aFirst: false, bFirst: false, outcome: 'nongame', winner: null, margin: 0, nongame: g.rawOpp ? null : g.nongame || 'D' });
+        return;
+      }
+      var og = PM.game(sec, g.opp, round);
+      seen[g.opp] = true;
+      var done = PM.isPlayed(sec, p, round), d = g.score - og.score;
+      games.push({
+        a: p, b: g.opp, aScore: g.score, bScore: og.score, aFirst: !!g.first, bFirst: !!og.first,
+        outcome: !done ? 'pending' : d === 0 ? 'tie' : 'win',
+        winner: done && d !== 0 ? (d > 0 ? p : g.opp) : null,
+        margin: done ? Math.abs(d) : 0, nongame: null
+      });
+    });
+    return games.concat(nongames);
+  };
+
+  PM.highGame = function (sec) {
+    var best = { score: 0, names: [] };
+    var drawn = PM.roundsDrawn(sec);
+    sec.players.forEach(function (pl, p) {
+      for (var r = 1; r <= drawn; r++) {
+        if (!PM.isPlayed(sec, p, r)) continue;
+        var s = pl.games[r - 1].score, nm = PM.displayName(pl.name);
+        if (s > best.score) best = { score: s, names: [nm] };
+        else if (s === best.score && best.names.indexOf(nm) < 0) best.names.push(nm);
+      }
+    });
+    return best;
+  };
+
+  // newOrder[i] = old index of the player who will sit at position i.
+  PM.reorderPlayers = function (sec, newOrder) {
+    var map = {};
+    newOrder.forEach(function (oldIdx, newIdx) { map[oldIdx] = newIdx; });
+    var players = newOrder.map(function (oldIdx) { return sec.players[oldIdx]; });
+    players.forEach(function (pl) {
+      pl.games.forEach(function (g) { if (g) g.opp = map[g.opp]; });
+    });
+    sec.players = players;
+  };
+
+  // Structural check for tournaments loaded from autosave: every game must point at a real
+  // player whose own game that round points back (or be a game against yourself).
+  PM.validTournament = function (t) {
+    if (!t || typeof t !== 'object' || !Array.isArray(t.sections) || typeof t.title !== 'string' ||
+        typeof t.date !== 'string' || (t.rankMethod !== 'M' && t.rankMethod !== 'A')) return false;
+    return t.sections.every(function (s) {
+      if (!s || typeof s.name !== 'string' || !Array.isArray(s.players)) return false;
+      var n = s.players.length;
+      return s.players.every(function (pl, p) {
+        if (!pl || typeof pl.name !== 'string' || !Array.isArray(pl.games)) return false;
+        return pl.games.every(function (g, r) {
+          if (g === null || g === undefined) return true; // a hole (saved as null)
+          if (typeof g !== 'object' || !Number.isInteger(g.opp) || g.opp < 0 || g.opp >= n ||
+              typeof g.score !== 'number' || !isFinite(g.score)) return false;
+          if (g.opp === p) return true;
+          var og = s.players[g.opp] && s.players[g.opp].games ? s.players[g.opp].games[r] : null;
+          return !!og && og.opp === p;
+        });
+      });
+    });
+  };
+
+  PM.hasGames = function (sec) { return PM.roundsDrawn(sec) > 0; };
+
+  PM.removePlayer = function (sec, p) {
+    if (PM.hasGames(sec)) throw new Error('Players can only be removed before the first draw. Mark them as missing instead.');
+    sec.players.splice(p, 1);
+  };
+})(PM);
+
+// PairMaster — read and write AuPair .TOU files.
+// Layout taken from AuPair's touprint.pl reader and tsh's AUPAIR.pm writer:
+//   *<M|A><DD.MM.YYYY> <title>
+//   *<SECTION>
+//   <high word, 36 chars><score, 3 cols>  (36 spaces + '  0' when none)
+//   <name, 20 chars>( %4d%4d)*  result = 2000 win / 1000 draw + score; opponent, '+' = this player started
+//   ...
+//   *** END OF FILE ***
+// Nongames are games against yourself: 2001 designated win (1 while the round is unfinished),
+// 2 designated loss, 1350 designated draw. A non-numeric opponent such as +-4 is kept as-is.
+// Verified byte-for-byte against a file saved by AuPair 6.16 (tests/fixtures/AUPAIR_SAVED.TOU).
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+  var CRLF = '\r\n';
+  var END = '*** END OF FILE ***';
+
+  function padLeft(s, w) { s = String(s); while (s.length < w) s = ' ' + s; return s; }
+  function padRight(s, w) { s = String(s); while (s.length < w) s += ' '; return s.slice(0, w); }
+
+  function gameField(sec, p, round) {
+    var g = sec.players[p].games[round - 1];
+    if (!g) return ' ' + padLeft(2, 4) + padLeft(p + 1, 4);
+    if (g.rawOpp) { // "needs an opponent" marker, kept as AuPair writes it; always space-separated from the score
+      return ' ' + padLeft(g.rawField !== undefined ? g.rawField : g.score, 4) + (g.rawOpp.length >= 4 ? ' ' + g.rawOpp : padLeft(g.rawOpp, 4));
+    }
+    if (g.opp === p) {
+      // As AuPair writes them: a bye/designated win is 1 until the round is finished, then 2001;
+      // a designated draw is a half game with a notional 350; a designated loss is 2.
+      var code = g.nongame === 'W' ? (PM.isRoundComplete(sec, round) ? 2001 : 1) : g.nongame === 'L' ? 2 : 1000 + g.score;
+      return ' ' + padLeft(code, 4) + padLeft(p + 1, 4);
+    }
+    var res = PM.gameResult(sec, p, round);
+    var flag = !res ? 0 : res.win === 1 ? 2 : res.win === 0.5 ? 1 : 0;
+    var opp = g.first ? '+' + (g.opp + 1) : String(g.opp + 1);
+    return ' ' + padLeft(flag * 1000 + g.score, 4) + (opp.length >= 4 ? ' ' + opp : padLeft(opp, 4));
+  }
+
+  PM.writeTou = function (t) {
+    var lines = ['*' + t.rankMethod + t.date + ' ' + t.title];
+    t.sections.forEach(function (sec) {
+      lines.push('*' + sec.name);
+      var hw = sec.highWord || { text: '', score: 0 };
+      // As AuPair 6.16 writes it: 36 characters of text, then the score in 3 columns.
+      lines.push(padRight(String(hw.text || ''), 36) + padLeft(hw.text ? hw.score || 0 : 0, 3));
+      var drawn = PM.roundsDrawn(sec);
+      sec.players.forEach(function (pl, p) {
+        var line = padRight(pl.name, 20);
+        // a hole in the middle is written as a designated loss so later rounds don't shift;
+        // nothing is written after a player's last round (as a short line in the file was read)
+        var lastR = pl.games.length;
+        for (var r = 1; r <= Math.min(drawn, lastR); r++) line += gameField(sec, p, r);
+        lines.push(line);
+      });
+    });
+    lines.push(END);
+    return lines.join(CRLF) + CRLF;
+  };
+
+  PM.parseTou = function (text) {
+    var lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+    var head = lines[0] || '';
+    if (head.charAt(0) !== '*') throw new Error('This is not a tournament (.TOU) file');
+    var rankMethod = head.charAt(1) === 'A' ? 'A' : 'M';
+    var rest = head.slice(2);
+    var sp = rest.indexOf(' ');
+    var t = PM.newTournament(sp < 0 ? rest : rest.slice(0, sp), sp < 0 ? '' : rest.slice(sp + 1), rankMethod);
+    var sec = null;
+    for (var i = 1; i < lines.length; i++) {
+      var line = lines[i];
+      if (line.trim() === END) break;
+      if (line.charAt(0) === '*') {
+        sec = PM.addSection(t, line.slice(1).replace(/\s+$/, ''));
+        var hw = lines[++i];
+        while (hw !== undefined && hw.trim() === '' && i + 1 < lines.length) hw = lines[++i];
+        hw = hw || '';
+        if (hw.length > 36 && /^\s*\d+\s*$/.test(hw.slice(36))) {
+          sec.highWord = { text: hw.slice(0, 36).trim(), score: parseInt(hw.slice(36), 10) };
+        } else {
+          var m = /^(.*)\s(\d+)\s*$/.exec(hw) || /^()(\d+)\s*$/.exec(hw);
+          if (m) sec.highWord = { text: m[1].trim(), score: parseInt(m[2], 10) };
+        }
+        continue;
+      }
+      if (!sec || line.trim() === '') continue;
+      var p = sec.players.length;
+      var pl = { name: line.slice(0, 20).replace(/\s+$/, ''), missing: false, games: [] };
+      sec.players.push(pl);
+      var tok = line.slice(20).trim().split(/\s+/).filter(Boolean);
+      for (var k = 0; k + 1 < tok.length; k += 2) {
+        var field = Math.max(0, parseInt(tok[k], 10) || 0);
+        var first = tok[k + 1].charAt(0) === '+';
+        var score = field % 1000;
+        if (!/^\+?\d+$/.test(tok[k + 1])) { // e.g. "+-4": AuPair removed this player's opponent
+          pl.games.push({ opp: p, score: score, first: false, nongame: null, rawOpp: tok[k + 1] });
+          continue;
+        }
+        var opp = parseInt(tok[k + 1], 10) - 1;
+        if (opp === p) {
+          var kind = (score === 1 || score === 3 || score === 5) ? 'W'
+            : (score === 2 || score === 4 || score === 6) ? 'L' : 'D';
+          pl.games.push({ opp: p, score: kind === 'D' ? score : 0, first: false, nongame: kind });
+        } else {
+          pl.games.push({ opp: opp, score: score, first: first, nongame: null, _tok: tok[k + 1], _field: tok[k] });
+        }
+      }
+    }
+    // Check every game: an opponent who doesn't exist, or whose own line doesn't point back,
+    // is marked "needs an opponent" (keeping the original numbers, so the file is written back as read).
+    PM.lastParseWarnings = [];
+    t.sections.forEach(function (s) {
+      var n = s.players.length, drawn = PM.roundsDrawn(s), bad = [];
+      s.players.forEach(function (pl, p) {
+        for (var r = 0; r < pl.games.length; r++) {
+          var g = pl.games[r];
+          if (!g || g.opp === p) continue;
+          var og = g.opp >= 0 && g.opp < n ? s.players[g.opp].games[r] : null;
+          if (!og || og.opp !== p) bad.push([p, r, og ? 'says they played ' + s.players[g.opp].name + ', who has a different opponent'
+            : g.opp >= 0 && g.opp < n ? 'says they played ' + s.players[g.opp].name + ', who has no game that round' : 'opponent number ' + (g.opp + 1) + ' does not exist']);
+        }
+        if (pl.games.length < drawn) PM.lastParseWarnings.push(s.name + ': ' + pl.name + ' has no result for round ' + (pl.games.length + 1) + (drawn > pl.games.length + 1 ? '–' + drawn : ''));
+      });
+      bad.forEach(function (b) {
+        var g = s.players[b[0]].games[b[1]];
+        s.players[b[0]].games[b[1]] = { opp: b[0], score: g.score, first: false, nongame: null, rawOpp: g._tok, rawField: g._field };
+        PM.lastParseWarnings.push(s.name + ': ' + s.players[b[0]].name + ', round ' + (b[1] + 1) + ': ' + b[2]);
+      });
+      s.players.forEach(function (pl) { pl.games.forEach(function (g) { if (g) { delete g._tok; delete g._field; } }); });
+    });
+    t.sections.forEach(function (s) {
+      var last = PM.roundsDrawn(s);
+      s.players.forEach(function (pl, p) {
+        var g = pl.games[last - 1];
+        pl.missing = !!(g && g.opp === p && g.nongame === 'L');
+      });
+    });
+    return t;
+  };
+
+  PM.touFileName = function (title) {
+    var base = String(title || 'TOURNEY').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    return (base || 'TOURNEY') + '.TOU';
+  };
+})(PM);
+
+// PairMaster — the draw: Australian (Swiss), Lagged Australian, King of the Hill, Chance,
+// Round Robin, Halves top v bottom, Quarters 1v2 3v4; byes, dropouts and balanced starts.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+
+  PM.METHODS = [
+    { id: 'australian', label: 'Australian draw (Swiss, no rematches)' },
+    { id: 'lagged', label: 'Lagged Australian (uses standings from 2 rounds back)' },
+    { id: 'koth', label: 'King of the Hill (1v2, 3v4, rematches allowed)' },
+    { id: 'roundrobin', label: 'Round robin (whole schedule)' },
+    { id: 'halves', label: 'Halves: top v bottom' },
+    { id: 'quarters12', label: 'Quarters: 1st v 2nd, 3rd v 4th' },
+    { id: 'chance', label: 'Chance (random)' }
+  ];
+  PM.FIRST_ROUND = [
+    { id: 'q13', label: 'Quarters: 1st v 3rd, 2nd v 4th (random within quarters)' },
+    { id: 'q12', label: 'Quarters: 1st v 2nd, 3rd v 4th (random within quarters)' },
+    { id: 'halves', label: 'Halves: top v bottom' },
+    { id: 'chance', label: 'Chance (random)' }
+  ];
+
+  function shuffle(a, rng) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(rng() * (i + 1)), x = a[i]; a[i] = a[j]; a[j] = x;
+    }
+    return a;
+  }
+  function zipPairs(xs, ys) { return xs.map(function (x, i) { return [x, ys[i]]; }); }
+  function consecutive(list) {
+    var out = [];
+    for (var i = 0; i + 1 < list.length; i += 2) out.push([list[i], list[i + 1]]);
+    return out;
+  }
+
+  // ---- first-round style pairings over a list in rating/entry order ----
+  function quarters13(list, rng) {
+    var h = list.length / 2, a = Math.ceil(h / 2);
+    return zipPairs(list.slice(0, a), shuffle(list.slice(h, h + a), rng))
+      .concat(zipPairs(list.slice(a, h), shuffle(list.slice(h + a), rng)));
+  }
+  function quarters12(list, rng) {
+    var k = Math.floor(list.length / 4), out = [];
+    out = out.concat(zipPairs(list.slice(0, k), shuffle(list.slice(k, 2 * k), rng)));
+    var mid = list.slice(2 * k, list.length - 2 * k); // 0 or 2 players
+    out = out.concat(consecutive(mid));
+    var rest = list.slice(list.length - 2 * k);
+    out = out.concat(zipPairs(rest.slice(0, k), shuffle(rest.slice(k), rng)));
+    return out;
+  }
+  function halves(list, shift) {
+    var h = list.length / 2, out = [];
+    for (var i = 0; i < h; i++) out.push([list[i], list[h + ((i + shift) % h)]]);
+    return out;
+  }
+  function firstRoundPairs(style, list, rng, shift) {
+    if (style === 'q12') return quarters12(list, rng);
+    if (style === 'halves') return halves(list, shift || 0);
+    if (style === 'chance') return consecutive(shuffle(list, rng));
+    return quarters13(list, rng);
+  }
+
+  // ---- history helpers ----
+  function meetings(sec, from, to) {
+    var m = {};
+    sec.players.forEach(function (pl, p) {
+      for (var r = Math.max(1, from); r <= to; r++) {
+        var g = pl.games[r - 1];
+        if (g && g.opp !== p) m[p + ':' + g.opp] = (m[p + ':' + g.opp] || 0) + 1;
+      }
+    });
+    return function (a, b) { return m[a + ':' + b] || 0; };
+  }
+
+  function startStats(sec, p, beforeRound) {
+    var f = 0, s = 0, streak = 0; // streak > 0: went second that many rounds in a row
+    for (var r = 1; r < beforeRound; r++) {
+      var g = sec.players[p].games[r - 1];
+      if (!g || g.opp === p) continue;
+      if (g.first) { f++; streak = streak < 0 ? streak - 1 : -1; }
+      else { s++; streak = streak > 0 ? streak + 1 : 1; }
+    }
+    return { balance: f - s, streak: streak };
+  }
+
+  // Does a (higher ranked) start against b? Fewer firsts starts; then longer run of seconds; then a.
+  PM.aStarts = function (sec, round, a, b) {
+    var sa = startStats(sec, a, round), sb = startStats(sec, b, round);
+    if (sa.balance !== sb.balance) return sa.balance < sb.balance;
+    if (sa.streak !== sb.streak) return sa.streak > sb.streak;
+    return true;
+  };
+
+  // Depth-first search: top unpaired player takes the nearest-ranked opponent he has met
+  // at most maxRepeat times; backtracks on dead ends. Returns pairs or null.
+  function swiss(order, met, maxRepeat) {
+    var n = order.length, used = [], result = [], budget = 300000;
+    function feasible() {
+      for (var a = 0; a < n; a++) {
+        if (used[a]) continue;
+        var any = false;
+        for (var b = 0; b < n && !any; b++) if (b !== a && !used[b] && met(order[a], order[b]) <= maxRepeat) any = true;
+        if (!any) return false;
+      }
+      return true;
+    }
+    function rec() {
+      var i = 0;
+      while (i < n && used[i]) i++;
+      if (i === n) return true;
+      used[i] = true;
+      for (var j = i + 1; j < n; j++) {
+        if (used[j] || met(order[i], order[j]) > maxRepeat) continue;
+        if (--budget < 0) break;
+        used[j] = true; result.push([order[i], order[j]]);
+        if (feasible() && rec()) return true;
+        result.pop(); used[j] = false;
+      }
+      used[i] = false;
+      return false;
+    }
+    return rec() ? result : null;
+  }
+  // Fallback search when the peer-first search runs out of time: always extend the most
+  // constrained player (fewest allowed opponents), trying the nearest-ranked first. Finds a
+  // valid pairing in hard late rounds where peer-first order wanders. Returns pairs or null.
+  function constrained(order, met, maxRepeat) {
+    var n = order.length, used = [], result = [], budget = 20000;
+    function options(a) {
+      var c = [];
+      for (var b = 0; b < n; b++) if (b !== a && !used[b] && met(order[a], order[b]) <= maxRepeat) c.push(b);
+      return c;
+    }
+    function rec() {
+      var best = -1, bestC = null;
+      for (var a = 0; a < n; a++) {
+        if (used[a]) continue;
+        var c = options(a);
+        if (!c.length) return false;
+        if (!bestC || c.length < bestC.length) { best = a; bestC = c; if (c.length === 1) break; }
+      }
+      if (best < 0) return true;
+      bestC.sort(function (x, y) { return Math.abs(x - best) - Math.abs(y - best); });
+      used[best] = true;
+      for (var k = 0; k < bestC.length; k++) {
+        if (--budget < 0) break;
+        var b = bestC[k];
+        used[b] = true; result.push(best < b ? [order[best], order[b]] : [order[b], order[best]]);
+        if (rec()) return true;
+        result.pop(); used[b] = false;
+      }
+      used[best] = false;
+      return false;
+    }
+    if (!rec()) return null;
+    return result.sort(function (x, y) { return order.indexOf(x[0]) - order.indexOf(y[0]); });
+  }
+
+  function australian(order, met) {
+    for (var rep = 0; rep <= order.length; rep++) {
+      var res = swiss(order, met, rep) || constrained(order, met, rep);
+      if (res) return res;
+    }
+    return consecutive(order);
+  }
+
+  function byeCount(sec, p, beforeRound) {
+    var c = 0;
+    for (var r = 1; r < beforeRound; r++) {
+      var g = sec.players[p].games[r - 1];
+      if (g && g.opp === p && g.nongame === 'W') c++;
+    }
+    return c;
+  }
+
+  function truncate(sec, round) {
+    sec.players.forEach(function (pl) { if (pl.games.length > round - 1) pl.games.length = round - 1; });
+  }
+
+  function place(sec, round, pairs) {
+    pairs.forEach(function (pr) { PM.pairGame(sec, round, pr[0], pr[1], PM.aStarts(sec, round, pr[0], pr[1])); });
+  }
+
+  function hasResults(sec, upTo) {
+    for (var r = 1; r <= upTo; r++) {
+      for (var p = 0; p < sec.players.length; p++) if (PM.gameResult(sec, p, r)) return true;
+    }
+    return false;
+  }
+
+  PM.nextRoundFor = function (sec, method) {
+    return method === 'lagged' ? PM.roundsDrawn(sec) + 1 : PM.roundsComplete(sec) + 1;
+  };
+
+  // Draw the next round of a section (or opts.round). Rounds from that one on are replaced.
+  PM.draw = function (t, sec, method, opts) {
+    opts = opts || {};
+    var rng = opts.rng || Math.random;
+    var round = opts.round || PM.nextRoundFor(sec, method);
+    var fresh = Math.max(1, opts.freshStart || 1);
+    truncate(sec, round);
+
+    var active = [];
+    sec.players.forEach(function (pl, p) {
+      if (pl.missing) PM.setNongame(sec, round, p, 'L');
+      else active.push(p);
+    });
+
+    if (method === 'roundrobin') return roundRobin(sec, round, active);
+
+    var standRound = method === 'lagged' && round >= 3 ? round - 2 : round - 1;
+    var useRanks = hasResults(sec, standRound);
+    var isActive = {};
+    active.forEach(function (p) { isActive[p] = true; });
+    var order = useRanks
+      ? PM.standings(t, sec, standRound).map(function (r) { return r.idx; }).filter(function (p) { return isActive[p]; })
+      : active.slice();
+
+    // Gibsonization: clinched players take the bye in an odd field, else meet the top non-contender.
+    var gibPairs = [];
+    if (opts.gibson && useRanks && (method === 'australian' || method === 'lagged' || method === 'koth') && PM.gibsonPlan) {
+      var plan = PM.gibsonPlan(t, sec, round, opts.gibson, standRound, fresh);
+      var gibs = plan.gibsons.filter(function (g) { return g.selected && isActive[g.idx]; });
+      if (gibs.length && order.length % 2 === 1) {
+        var gb = gibs.shift();
+        PM.setNongame(sec, round, gb.idx, 'W');
+        order.splice(order.indexOf(gb.idx), 1);
+      }
+      gibs.forEach(function (g) {
+        if (g.opp === null || order.indexOf(g.idx) < 0 || order.indexOf(g.opp) < 0) return;
+        gibPairs.push([g.idx, g.opp]);
+        order.splice(order.indexOf(g.idx), 1);
+        order.splice(order.indexOf(g.opp), 1);
+      });
+    }
+
+    if (order.length % 2 === 1) {
+      var min = Infinity;
+      order.forEach(function (p) { min = Math.min(min, byeCount(sec, p, round)); });
+      var byeIdx = -1;
+      for (var i = order.length - 1; i >= 0; i--) if (byeCount(sec, order[i], round) === min) { byeIdx = i; break; }
+      PM.setNongame(sec, round, order[byeIdx], 'W');
+      order.splice(byeIdx, 1);
+    }
+
+    var pairs;
+    if (method === 'halves') pairs = halves(active.filter(function (p) { return order.indexOf(p) >= 0; }), round - 1);
+    else if (method === 'quarters12') pairs = quarters12(order, rng);
+    else if (method === 'chance') pairs = consecutive(shuffle(order, rng));
+    else if (!useRanks) pairs = firstRoundPairs(opts.firstRound || 'q13', order, rng, round - 1);
+    else if (method === 'koth') pairs = consecutive(order);
+    else pairs = australian(order, meetings(sec, fresh, round - 1));
+
+    place(sec, round, gibPairs.concat(pairs));
+    return round;
+  };
+
+  PM._meetings = meetings;
+
+  function roundRobin(sec, round, active) {
+    var arr = active.slice();
+    if (arr.length % 2 === 1) arr.push(-1);
+    var n = arr.length, rounds = [];
+    for (var k = 0; k < n - 1; k++) {
+      var pr = [];
+      for (var i = 0; i < n / 2; i++) pr.push([arr[i], arr[n - 1 - i]]);
+      rounds.push(pr);
+      arr.splice(1, 0, arr.pop());
+    }
+    // put the meeting of the top two seeds in the final round
+    var top = active[0], second = active[1];
+    var idx = -1;
+    rounds.forEach(function (pr, k) {
+      pr.forEach(function (x) { if ((x[0] === top && x[1] === second) || (x[0] === second && x[1] === top)) idx = k; });
+    });
+    if (idx >= 0) rounds.push(rounds.splice(idx, 1)[0]);
+    rounds.forEach(function (pr, k) {
+      var r = round + k;
+      sec.players.forEach(function (pl, p) { if (pl.missing) PM.setNongame(sec, r, p, 'L'); });
+      pr.forEach(function (x) {
+        if (x[0] < 0) PM.setNongame(sec, r, x[1], 'W');
+        else if (x[1] < 0) PM.setNongame(sec, r, x[0], 'W');
+        else {
+          var a = Math.min(x[0], x[1]), b = Math.max(x[0], x[1]);
+          PM.pairGame(sec, r, a, b, PM.aStarts(sec, r, a, b));
+        }
+      });
+    });
+    return round;
+  }
+
+  PM.blankRound = function (sec, round) { truncate(sec, round); };
+
+  function scored(sec, round, p) {
+    var g = PM.game(sec, p, round);
+    return g && g.opp !== p && g.score >= PM.MIN_SCORE;
+  }
+
+  // Manually pair a with b; their previous opponents are paired together (or get a bye).
+  PM.setPairing = function (sec, round, a, b) {
+    if (a === b) throw new Error('A player cannot play themselves');
+    var ga = PM.game(sec, a, round), gb = PM.game(sec, b, round);
+    var involved = [a, b];
+    if (ga) involved.push(ga.opp);
+    if (gb) involved.push(gb.opp);
+    involved.forEach(function (p) {
+      if (scored(sec, round, p)) throw new Error('Scores are already entered for this game. Set both scores to 0 first.');
+    });
+    var left = [];
+    [ga, gb].forEach(function (g, i) {
+      var self = i === 0 ? a : b;
+      if (g && g.opp !== self && g.opp !== a && g.opp !== b && left.indexOf(g.opp) < 0) left.push(g.opp);
+    });
+    // Settle the leftovers first: setNongame also hands the leftover's old opponent (a or b) a
+    // designated win, which pairGame(a, b) below then overwrites. Done afterwards, it broke a v b.
+    if (left.length === 2) PM.pairGame(sec, round, left[0], left[1], PM.aStarts(sec, round, left[0], left[1]));
+    else if (left.length === 1) PM.setNongame(sec, round, left[0], 'W');
+    PM.pairGame(sec, round, a, b, PM.aStarts(sec, round, a, b));
+  };
+
+  // Cycle who starts: p starts -> opponent starts -> nobody marked -> p starts.
+  PM.toggleStart = function (sec, round, p) {
+    var g = PM.game(sec, p, round);
+    if (!g || g.opp === p) return;
+    var og = PM.game(sec, g.opp, round);
+    if (g.first) { g.first = false; og.first = true; }
+    else if (og.first) { og.first = false; }
+    else { g.first = true; }
+  };
+})(PM);
+
+// PairMaster — Gibsonization (as in John Chew's tsh).
+// A player whose final place can no longer change is paired with the highest-ranked
+// player who can no longer reach the prizes, so they don't decide the race for prizes.
+// Clinching is judged on wins only: a chaser who could tie on wins counts as able to catch up.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+
+  PM.GIBSON_MODES = [
+    { id: 'off', label: 'Off' },
+    { id: 'first', label: 'Only a player who has clinched 1st place' },
+    { id: 'decided', label: 'Anyone whose prize place is decided' }
+  ];
+
+  // cfg: { totalRounds, prizes, mode: 'off'|'first'|'decided', players?: [idx] (ticked; default all) }
+  // Returns { remaining, gibsons: [{idx, place, selected, opp}], outOfPrizes: [idx] } in rank order.
+  PM.gibsonPlan = function (t, sec, round, cfg, standRound, freshStart) {
+    var res = { remaining: 0, gibsons: [], outOfPrizes: [] };
+    if (standRound === undefined || standRound === null) standRound = round - 1;
+    if (!cfg || cfg.mode === 'off' || !(cfg.totalRounds > 0) || standRound < 1) return res;
+    var R = cfg.totalRounds - standRound;
+    if (R <= 0) return res;
+    res.remaining = R;
+    var prizes = Math.max(1, parseInt(cfg.prizes, 10) || 1);
+    var rows = PM.standings(t, sec, standRound);
+    var missing = function (p) { return !!sec.players[p].missing; };
+    var maxWins = function (row) { return row.wins + (missing(row.idx) ? 0 : R); };
+
+    function placeDecided(k) {
+      var x = rows[k];
+      for (var j = 0; j < rows.length; j++) {
+        if (j < k && !(rows[j].wins > maxWins(x))) return false;   // could still catch someone above
+        if (j > k && !(maxWins(rows[j]) < x.wins)) return false;   // someone below could still catch up
+      }
+      return true;
+    }
+    var last = cfg.mode === 'first' ? 1 : Math.min(prizes, rows.length);
+    var isGibson = {};
+    for (var k = 0; k < last; k++) {
+      if (!placeDecided(k)) { if (cfg.mode === 'first') break; continue; }
+      if (missing(rows[k].idx)) continue;
+      isGibson[rows[k].idx] = true;
+      res.gibsons.push({
+        idx: rows[k].idx, place: k + 1, opp: null,
+        selected: !cfg.players || cfg.players.indexOf(rows[k].idx) >= 0
+      });
+    }
+    rows.forEach(function (y) {
+      if (missing(y.idx) || isGibson[y.idx]) return;
+      var ahead = rows.filter(function (p) { return p.wins > maxWins(y); }).length;
+      if (ahead >= prizes) res.outOfPrizes.push(y.idx);
+    });
+
+    var met = PM._meetings(sec, freshStart || 1, round - 1), used = {};
+    res.gibsons.forEach(function (g) {
+      if (!g.selected) return;
+      var free = res.outOfPrizes.filter(function (y) { return !used[y]; });
+      var pick = free.filter(function (y) { return met(g.idx, y) === 0; })[0];
+      if (pick === undefined) pick = free[0];
+      if (pick !== undefined) { g.opp = pick; used[pick] = true; }
+    });
+    return res;
+  };
+})(PM);
+
+// PairMaster — table numbers (with players fixed to a table by @12 or @R in their name)
+// and the Clean command that strips such markers before sending the .TOU for ratings.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+
+  // Returns { "secIdx:playerIdx": table } for every player with a real game in the round.
+  // Sections are numbered consecutively. @N fixes a player to table N (if inside the
+  // section's range, as touprint does); @R takes the earliest free table; the rest follow standings.
+  PM.assignTables = function (t, round) {
+    var out = {}, next = 1;
+    t.sections.forEach(function (sec, s) {
+      var first = next, last = first + Math.max(1, Math.floor(sec.players.length / 2)) - 1;
+      var used = {};
+      function seat(p, table) {
+        var g = PM.game(sec, p, round);
+        out[s + ':' + p] = table; out[s + ':' + g.opp] = table; used[table] = true;
+      }
+      function free(p) {
+        var g = PM.game(sec, p, round);
+        return g && g.opp !== p && out[s + ':' + p] === undefined;
+      }
+      var order = PM.standings(t, sec, Math.max(0, round - 1)).map(function (r) { return r.idx; });
+      order.forEach(function (p) {
+        var m = /@(\d+)/.exec(sec.players[p].name);
+        if (m && free(p)) {
+          var tb = parseInt(m[1], 10);
+          if (tb >= first && tb <= last && !used[tb]) seat(p, tb);
+        }
+      });
+      order.forEach(function (p) {
+        if (/@R/i.test(sec.players[p].name) && free(p)) {
+          var tb = first; while (used[tb]) tb++; seat(p, tb);
+        }
+      });
+      order.forEach(function (p) {
+        if (free(p)) { var tb = first; while (used[tb]) tb++; seat(p, tb); }
+      });
+      var maxUsed = last;
+      Object.keys(used).forEach(function (k) { if (+k > maxUsed) maxUsed = +k; });
+      next = maxUsed + 1;
+    });
+    return out;
+  };
+
+  PM.cleanMarkers = function (t) {
+    t.sections.forEach(function (sec) {
+      sec.players.forEach(function (pl) { pl.name = PM.displayName(pl.name); });
+    });
+  };
+})(PM);
+
+// PairMaster — data for printed reports: player scorecards and the division wall chart.
+// Result codes: 'W' won, 'L' lost, 'T' tie, 'bye' bye / designated win, 'dL' designated loss,
+// 'dD' designated draw, 'pending' drawn but no result yet, '' not drawn yet.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+
+  function cell(sec, p, r) {
+    var g = PM.game(sec, p, r);
+    if (!g) return null;
+    if (g.opp === p) {
+      if (g.rawOpp) return { opp: null, first: false, result: 'pending', score: null, oppScore: null };
+      var k = g.nongame || 'D';
+      return { opp: null, first: false, result: k === 'W' ? 'bye' : k === 'L' ? 'dL' : 'dD', score: null, oppScore: null };
+    }
+    var og = PM.game(sec, g.opp, r);
+    if (!PM.isPlayed(sec, p, r)) return { opp: g.opp, first: !!g.first, result: 'pending', score: null, oppScore: null };
+    var d = g.score - og.score;
+    return { opp: g.opp, first: !!g.first, result: d > 0 ? 'W' : d < 0 ? 'L' : 'T', score: g.score, oppScore: og.score };
+  }
+
+  // One row per round (up to totalRounds if given, so blank rows can be filled in by hand).
+  // cache (optional, shared across calls): table numbers per round, so printing every card stays fast.
+  PM.scorecard = function (t, sec, p, totalRounds, cache) {
+    cache = cache || {};
+    function tablesFor(r) { return cache[r] || (cache[r] = PM.assignTables(t, r)); }
+    var si = t.sections.indexOf(sec), rounds = Math.max(PM.roundsDrawn(sec), totalRounds || 0);
+    var wins = 0, spread = 0, rows = [];
+    for (var r = 1; r <= rounds; r++) {
+      var c = cell(sec, p, r);
+      if (!c) { rows.push({ round: r, table: null, opp: null, first: false, score: null, oppScore: null, result: '', wins: null, spread: null }); continue; }
+      var res = PM.gameResult(sec, p, r);
+      if (res) { wins += res.win; spread += res.spread; }
+      var tb = c.opp !== null ? tablesFor(r)[si + ':' + p] : undefined;
+      rows.push({
+        round: r, table: tb === undefined ? null : tb, opp: c.opp, first: c.first,
+        score: c.score, oppScore: c.oppScore, result: c.result,
+        wins: res ? wins : null, spread: res ? spread : null
+      });
+    }
+    return rows;
+  };
+
+  // Every player (in player-number order) with a cell per drawn round, totals and rank.
+  PM.wallChart = function (t, sec) {
+    var rounds = PM.roundsDrawn(sec), byIdx = {};
+    PM.standings(t, sec, rounds).forEach(function (row) { byIdx[row.idx] = row; });
+    return {
+      rounds: rounds,
+      rows: sec.players.map(function (pl, p) {
+        var cells = [];
+        for (var r = 1; r <= rounds; r++) {
+          var c = cell(sec, p, r);
+          cells.push(c && {
+            opp: c.opp, first: c.first, result: c.result,
+            margin: c.result === 'bye' ? 1 : c.score !== null ? Math.abs(c.score - c.oppScore) : 0
+          });
+        }
+        var st = byIdx[p];
+        return { idx: p, rank: st.rank, wins: st.wins, spread: st.spread, cells: cells };
+      })
+    };
+  };
+})(PM);
+
+// PairMaster — user interface, printing and autosave.
+(function (PM) {
+  'use strict';
+  var STORE_KEY = 'pairmaster.current';
+  var $ = function (id) { return document.getElementById(id); };
+  var st = { t: null, sec: 0, round: 1, tab: 'players', printWhat: 'pairings', printSecs: 'all', standRound: null, printRound: null, printWithStandings: true };
+  var draft = { method: 'australian', firstRound: 'q13', freshStart: 1, gibUntick: {} };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function nm(sec, p) { return esc(PM.displayName(sec.players[p].name)); }
+  function sec() { return st.t.sections[st.sec]; }
+  function todayDMY() {
+    var d = new Date();
+    return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+  }
+  function dmyToIso(s) { var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s || ''); return m ? m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2) : ''; }
+  function isoToDmy(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? m[3] + '.' + m[2] + '.' + m[1] : ''; }
+  function fmtSigned(n) { return n > 0 ? '+' + n : String(n); }
+  function fmtWins(w) { return String(w).replace('.5', '½'); }
+
+  // ---------- persistence ----------
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ t: st.t, sec: st.sec, round: st.round, tab: st.tab }));
+      $('saved-label').textContent = 'Autosaved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      $('saved-label').textContent = 'Autosave unavailable – save .TOU files often';
+    }
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return false;
+      var d = JSON.parse(raw);
+      if (!d || !PM.validTournament(d.t)) throw new Error('damaged');
+      st.t = d.t; st.sec = d.sec || 0; st.round = d.round || 1; st.tab = d.tab || 'players';
+      return true;
+    } catch (e) {
+      try { localStorage.setItem(STORE_KEY + '.damaged', localStorage.getItem(STORE_KEY)); } catch (e2) { /* ignore */ }
+      alert('The autosaved tournament could not be read, so a new one has been started. ' +
+        'The damaged copy was kept. Open your latest .TOU file to carry on.');
+      return false;
+    }
+  }
+  function changed() { save(); render(); }
+
+  function freshTournament() {
+    st.t = PM.newTournament(todayDMY(), 'New tournament', 'M');
+    PM.addSection(st.t, 'A');
+    st.sec = 0; st.round = 1; st.tab = 'players';
+  }
+
+  // ---------- .TOU files: saved into a chosen folder (Chrome/Edge), else downloaded ----------
+  var canFolder = typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
+  var folder = null; // FileSystemDirectoryHandle, remembered in IndexedDB
+  function idb(op, value) {
+    return new Promise(function (resolve) {
+      try {
+        var rq = indexedDB.open('pairmaster', 1);
+        rq.onupgradeneeded = function () { rq.result.createObjectStore('kv'); };
+        rq.onerror = function () { resolve(null); };
+        rq.onsuccess = function () {
+          try {
+            var os = rq.result.transaction('kv', op === 'get' ? 'readonly' : 'readwrite').objectStore('kv');
+            var r = op === 'get' ? os.get('folder') : os.put(value, 'folder');
+            r.onsuccess = function () { resolve(r.result || null); };
+            r.onerror = function () { resolve(null); };
+          } catch (e) { resolve(null); }
+        };
+      } catch (e) { resolve(null); }
+    });
+  }
+  function renderFolder() {
+    var b = $('btn-folder');
+    if (!canFolder) return;
+    b.hidden = false;
+    b.textContent = folder ? '📁 ' + folder.name : '📁 Choose save folder';
+  }
+  async function chooseFolder() {
+    try {
+      folder = await window.showDirectoryPicker({ id: 'pairmaster', mode: 'readwrite', startIn: 'documents' });
+      await idb('put', folder);
+    } catch (e) { /* cancelled */ }
+    renderFolder();
+    return folder;
+  }
+  async function usableFolder() {
+    if (!folder) folder = await idb('get');
+    if (!folder) return chooseFolder();
+    try {
+      if ((await folder.queryPermission({ mode: 'readwrite' })) === 'granted') return folder;
+      if ((await folder.requestPermission({ mode: 'readwrite' })) === 'granted') return folder;
+    } catch (e) { /* folder moved or deleted */ }
+    alert('PairMaster can\'t use the folder "' + folder.name + '". Please choose the save folder again.');
+    folder = null;
+    return chooseFolder();
+  }
+  function flash(msg) { $('saved-label').textContent = msg; }
+  function download(text, file) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  }
+  async function saveTou() {
+    var dir = null;
+    if (canFolder) { dir = await usableFolder(); if (!dir) return; } // ask for the folder first, while the click still counts
+    var name = prompt('File name for the .TOU file (8 characters at most, no spaces):', st.t.lastSavedName || PM.touFileName(st.t.title));
+    if (!name) return;
+    name = name.toUpperCase().replace(/\.TOU$/, '').replace(/[^A-Z0-9_-]/g, '').slice(0, 8) || 'TOURNEY';
+    var file = name + '.TOU', text = PM.writeTou(st.t);
+    if (dir) {
+      try {
+        var exists = false;
+        try { await dir.getFileHandle(file); exists = true; } catch (e) { /* new file */ }
+        if (exists && name !== st.t.lastSavedName && !confirm(file + ' already exists in ' + dir.name + '. Replace it?')) return;
+        var w = await (await dir.getFileHandle(file, { create: true })).createWritable();
+        await w.write(text); await w.close();
+        flash('Saved ' + file + ' in ' + dir.name + ' ✓');
+      } catch (e) {
+        alert('Could not save in ' + dir.name + ' (' + e.message + '). It will be downloaded instead.');
+        download(text, file);
+      }
+    } else download(text, file);
+    st.t.lastSavedName = name;
+    st.t.lastBackupRounds = totalComplete();
+    save(); renderBanner();
+    if (dir) flash('Saved ' + file + ' in ' + dir.name + ' ✓');
+  }
+  function openTouText(fname, text) {
+    try {
+      var t = PM.parseTou(text);
+      if (!t.sections.length) throw new Error('No divisions found in this file.');
+      var warn = PM.lastParseWarnings || [];
+      if (!confirm('Open ' + fname + '? The tournament on screen will be replaced.' + (warn.length
+        ? '\n\nThis file has ' + warn.length + ' problem' + (warn.length === 1 ? '' : 's') + ' (affected games will show "Needs an opponent"):\n• ' +
+          warn.slice(0, 8).join('\n• ') + (warn.length > 8 ? '\n• …and ' + (warn.length - 8) + ' more' : '') : ''))) return;
+      t.lastBackupRounds = t.sections.reduce(function (n, s) { return n + PM.roundsComplete(s); }, 0);
+      t.lastSavedName = fname.toUpperCase().replace(/\.TOU$/, '').slice(0, 8);
+      st.t = t; st.sec = 0; st.round = defaultRound(t.sections[0]); st.tab = 'round'; changed();
+    } catch (e) { alert('Could not open ' + fname + ': ' + e.message); }
+  }
+  async function openTou() {
+    if (typeof window.showOpenFilePicker === 'function') {
+      if (!folder) folder = await idb('get');
+      try {
+        var hs = await window.showOpenFilePicker({ id: 'pairmaster', startIn: folder || 'documents',
+          types: [{ description: 'Tournament files (.TOU)', accept: { 'text/plain': ['.tou', '.TOU'] } }] });
+        var f = await hs[0].getFile();
+        openTouText(f.name, await f.text());
+      } catch (e) { if (e && e.name !== 'AbortError') alert('Could not open the file: ' + e.message); }
+      return;
+    }
+    $('file-input').value = ''; $('file-input').click();
+  }
+  function totalComplete() {
+    return st.t.sections.reduce(function (n, s) { return n + PM.roundsComplete(s); }, 0);
+  }
+
+  // ---------- chrome ----------
+  function renderBanner() {
+    var b = $('banner'), done = totalComplete();
+    if (done > 0 && done !== (st.t.lastBackupRounds || 0)) {
+      b.hidden = false;
+      b.innerHTML = 'A round has finished since your last backup. <button id="banner-save" class="small">Save a .TOU backup now</button>';
+      $('banner-save').onclick = saveTou;
+    } else b.hidden = true;
+  }
+  function renderChrome() {
+    $('event-label').textContent = st.t.title + (st.t.date ? ' · ' + st.t.date : '');
+    Array.prototype.forEach.call($('tabs').children, function (b) { b.classList.toggle('active', b.dataset.tab === st.tab); });
+    var bar = $('section-bar');
+    bar.innerHTML = '<span class="hint">Division:</span>' + st.t.sections.map(function (s, i) {
+      return '<button class="chip' + (i === st.sec ? ' active' : '') + '" data-sec="' + i + '">' + esc(s.name) +
+        ' <span class="hint">(' + s.players.length + ')</span></button>';
+    }).join('') + '<button class="small" id="add-sec">+ Add division</button>';
+    bar.querySelectorAll('[data-sec]').forEach(function (b) {
+      b.onclick = function () { st.sec = +b.dataset.sec; st.round = defaultRound(sec()); st.standRound = null; changed(); };
+    });
+    $('add-sec').onclick = function () {
+      var n = prompt('Name of the new division (e.g. B, ADVANCED, INTERMEDIATE):');
+      if (!n) return;
+      PM.addSection(st.t, n.trim().toUpperCase().slice(0, 20));
+      st.sec = st.t.sections.length - 1; st.tab = 'players'; changed();
+    };
+    renderBanner();
+  }
+  function defaultRound(s) {
+    var c = PM.roundsComplete(s), d = PM.roundsDrawn(s);
+    return Math.max(1, Math.min(d, c + 1));
+  }
+  function render() {
+    if (st.sec >= st.t.sections.length) st.sec = 0;
+    renderChrome();
+    var main = $('main');
+    if (st.tab === 'players') renderPlayers(main);
+    else if (st.tab === 'round') renderRound(main);
+    else if (st.tab === 'standings') renderStandings(main);
+    else renderPrint(main);
+  }
+
+  // ---------- players ----------
+  function renderPlayers(main) {
+    var s = sec(), started = PM.hasGames(s);
+    var otherSecs = st.t.sections.map(function (x, i) { return i; }).filter(function (i) { return i !== st.sec; });
+    var h = '<div class="card"><h2>Tournament</h2><div class="row">' +
+      '<label>Date</label><input type="date" id="t-date" value="' + dmyToIso(st.t.date) + '">' +
+      '<label>Title</label><input id="t-title" size="34" value="' + esc(st.t.title) + '">' +
+      '<label>Rank ties by</label><select id="t-rank"><option value="M"' + (st.t.rankMethod === 'M' ? ' selected' : '') +
+      '>Spread (margin)</option><option value="A"' + (st.t.rankMethod === 'A' ? ' selected' : '') + '>Total score (aggregate)</option></select>' +
+      '</div></div>';
+    h += '<div class="card"><h2>Division ' + esc(s.name) + ' – ' + s.players.length + ' players</h2>' +
+      '<div class="row"><label>Division name</label><input id="s-name" size="16" value="' + esc(s.name) + '">' +
+      '<button id="s-sort" class="small">Sort A–Z</button>' +
+      (st.t.sections.length > 1 && !started ? '<button id="s-del" class="small danger">Delete division</button>' : '') + '</div>' +
+      '<p class="hint">' + (started
+        ? 'The draw has started. Players who leave should be marked <b>Missing</b> – they get a designated loss each round and are left out of the draw.'
+        : 'Enter players in rating order, highest first, before the first draw. Add <b>@12</b> to a name to fix that player to table 12, or <b>@R</b> for a fixed table near the front.') + '</p>';
+    h += '<table><thead><tr><th class="num">#</th><th>Name</th><th>Missing</th><th></th></tr></thead><tbody>';
+    s.players.forEach(function (pl, p) {
+      h += '<tr class="' + (pl.missing ? 'missing' : '') + '"><td class="num">' + (p + 1) + '</td>' +
+        '<td><input class="name-input" data-name="' + p + '" maxlength="20" value="' + esc(pl.name) + '"></td>' +
+        '<td><input type="checkbox" data-miss="' + p + '"' + (pl.missing ? ' checked' : '') + ' title="Dropped out / absent"></td>' +
+        '<td class="actions"><button class="small" data-up="' + p + '"' + (p === 0 ? ' disabled' : '') + '>↑</button> ' +
+        '<button class="small" data-down="' + p + '"' + (p === s.players.length - 1 ? ' disabled' : '') + '>↓</button> ' +
+        (!started && otherSecs.length ? '<select class="small" data-move="' + p + '"><option value="">Move to…</option>' +
+          otherSecs.map(function (i) { return '<option value="' + i + '">' + esc(st.t.sections[i].name) + '</option>'; }).join('') + '</select> ' : '') +
+        (!started ? '<button class="small danger" data-del="' + p + '">Remove</button>' : '') + '</td></tr>';
+    });
+    h += '</tbody></table><div class="row" style="margin-top:10px"><input id="p-new" size="28" maxlength="20" placeholder="First name Surname, then Enter">' +
+      '<button id="p-add" class="primary">Add player</button></div>' +
+      '<details><summary class="hint">Paste a list of players (one per line)</summary><textarea id="p-bulk" rows="6" cols="40"></textarea><br><button id="p-bulk-add" class="small">Add all</button></details></div>';
+    main.innerHTML = h;
+
+    $('t-date').onchange = function () { st.t.date = isoToDmy(this.value) || st.t.date; changed(); };
+    $('t-title').onchange = function () { st.t.title = this.value.trim(); changed(); };
+    $('t-rank').onchange = function () { st.t.rankMethod = this.value; changed(); };
+    $('s-name').onchange = function () { s.name = this.value.trim().toUpperCase().slice(0, 20) || s.name; changed(); };
+    $('s-sort').onclick = function () {
+      var order = s.players.map(function (x, i) { return i; });
+      order.sort(function (a, b) { return PM.displayName(s.players[a].name).localeCompare(PM.displayName(s.players[b].name)); });
+      PM.reorderPlayers(s, order); changed();
+    };
+    if ($('s-del')) $('s-del').onclick = function () {
+      if (!confirm('Delete division ' + s.name + ' and its players?')) return;
+      st.t.sections.splice(st.sec, 1); st.sec = 0; changed();
+    };
+    function addName(n) {
+      n = n.replace(/\s+/g, ' ').trim();
+      if (n) PM.addPlayer(s, n.slice(0, 20));
+    }
+    $('p-add').onclick = function () { addName($('p-new').value); changed(); $('p-new').focus(); };
+    $('p-new').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
+    $('p-bulk-add').onclick = function () { $('p-bulk').value.split(/\n/).forEach(addName); changed(); };
+    main.querySelectorAll('[data-name]').forEach(function (inp) {
+      inp.onchange = function () { var v = this.value.replace(/\s+/g, ' ').trim(); if (v) s.players[+this.dataset.name].name = v.slice(0, 20); changed(); };
+    });
+    main.querySelectorAll('[data-miss]').forEach(function (cb) {
+      cb.onchange = function () { s.players[+this.dataset.miss].missing = this.checked; changed(); };
+    });
+    function move(p, q) {
+      var order = s.players.map(function (x, i) { return i; });
+      order[p] = q; order[q] = p; PM.reorderPlayers(s, order); changed();
+    }
+    main.querySelectorAll('[data-up]').forEach(function (b) { b.onclick = function () { var p = +b.dataset.up; move(p, p - 1); }; });
+    main.querySelectorAll('[data-down]').forEach(function (b) { b.onclick = function () { var p = +b.dataset.down; move(p, p + 1); }; });
+    main.querySelectorAll('[data-del]').forEach(function (b) {
+      b.onclick = function () {
+        var p = +b.dataset.del;
+        if (!confirm('Remove ' + PM.displayName(s.players[p].name) + '?')) return;
+        try { PM.removePlayer(s, p); } catch (e) { alert(e.message); }
+        changed();
+      };
+    });
+    main.querySelectorAll('[data-move]').forEach(function (sel) {
+      sel.onchange = function () {
+        if (this.value === '') return;
+        var to = st.t.sections[+this.value];
+        if (PM.hasGames(to)) { alert('Division ' + to.name + ' has already started.'); return render(); }
+        var pl = s.players.splice(+this.dataset.move, 1)[0];
+        to.players.push(pl); changed();
+      };
+    });
+  }
+
+  // ---------- rounds & scores ----------
+  function resultText(s, p, r) {
+    var g = PM.game(s, p, r);
+    var o = g.opp, og = PM.game(s, o, r);
+    if (g.score < PM.MIN_SCORE || og.score < PM.MIN_SCORE) return '';
+    var d = g.score - og.score;
+    if (d === 0) return 'Tie ' + g.score + '–' + og.score;
+    var w = d > 0 ? p : o;
+    return nm(s, w) + ' wins by ' + Math.abs(d);
+  }
+
+  function gibsonCfg(s) {
+    return { totalRounds: s.totalRounds || 0, prizes: s.prizes || 1, mode: s.gibsonMode || 'off' };
+  }
+  function gibsonUsed(method) { return method === 'australian' || method === 'lagged' || method === 'koth'; }
+  function gibsonSelected(s, plan) {
+    return plan.gibsons.filter(function (g) { return !draft.gibUntick[st.sec + ':' + g.idx]; }).map(function (g) { return g.idx; });
+  }
+  function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
+  function gibsonBlock(s, nextR) {
+    if (!gibsonUsed(draft.method)) return '';
+    var cfg = gibsonCfg(s);
+    var modeOpts = PM.GIBSON_MODES.map(function (m) { return '<option value="' + m.id + '"' + (m.id === cfg.mode ? ' selected' : '') + '>' + m.label + '</option>'; }).join('');
+    var h = '<details class="gib"' + (cfg.mode !== 'off' ? ' open' : '') + '><summary><b>Gibsonization</b> <span class="hint">' +
+      (cfg.mode === 'off' ? 'off' : 'on – ' + cfg.prizes + ' prize' + (cfg.prizes === 1 ? '' : 's')) + '</span></summary>' +
+      '<div class="row"><label title="The whole event, not the round you are drawing: for a 12-round event enter 12">Total rounds in this division (whole event)</label><input id="g-rounds" type="number" min="1" style="width:70px" value="' + (s.totalRounds || '') + '">' +
+      '<label>Prizes</label><input id="g-prizes" type="number" min="1" style="width:70px" value="' + (s.prizes || '') + '"></div>' +
+      '<div class="row"><label>Who is Gibsonized</label><select id="g-mode">' + modeOpts + '</select></div>';
+    if (cfg.mode !== 'off') {
+      if (!cfg.totalRounds) h += '<p class="pill warn">Enter the total number of rounds in this division for the whole event (for example 12 for a 12-round event), so PairMaster knows how many games are left.</p>';
+      else {
+        var standRound = draft.method === 'lagged' && nextR >= 3 ? nextR - 2 : nextR - 1;
+        var plan = PM.gibsonPlan(st.t, s, nextR, cfg, standRound, draft.freshStart);
+        var sel = gibsonSelected(s, plan);
+        plan = PM.gibsonPlan(st.t, s, nextR, { totalRounds: cfg.totalRounds, prizes: cfg.prizes, mode: cfg.mode, players: sel }, standRound, draft.freshStart);
+        var active = s.players.filter(function (pl) { return !pl.missing; }).length;
+        var byeTaken = active % 2 === 1;
+        if (!plan.remaining) h += '<p class="hint">No rounds left after this one to Gibsonize for.</p>';
+        else if (!plan.gibsons.length) h += '<p class="hint">Nobody has clinched yet (' + plan.remaining + ' game' + (plan.remaining === 1 ? '' : 's') + ' left including this one, judged on wins).</p>';
+        else {
+          h += '<p class="hint">Clinched (' + plan.remaining + ' game' + (plan.remaining === 1 ? '' : 's') + ' left). Untick anyone you don\'t want Gibsonized:</p>';
+          plan.gibsons.forEach(function (g) {
+            var what;
+            if (!g.selected) what = 'drawn normally';
+            else if (byeTaken) { what = 'takes the bye (odd number of players)'; byeTaken = false; }
+            else if (g.opp === null) what = 'nobody is out of the prizes yet, so drawn normally';
+            else what = 'will play <b>' + nm(s, g.opp) + '</b> (highest-ranked player out of the prizes)';
+            h += '<div class="row"><label><input type="checkbox" data-gib="' + g.idx + '"' + (g.selected ? ' checked' : '') + '> <b>' +
+              nm(s, g.idx) + '</b> has clinched ' + ordinal(g.place) + ' place</label><span class="hint">– ' + what + '</span></div>';
+          });
+        }
+      }
+    }
+    return h + '</details>';
+  }
+
+  function renderRound(main) {
+    var s = sec(), drawn = PM.roundsDrawn(s), complete = PM.roundsComplete(s);
+    if (st.round > drawn + 1) st.round = drawn + 1;
+    if (st.round < 1) st.round = 1;
+    var r = st.round;
+    if (!s.players.length) { main.innerHTML = '<div class="card">Add players to this division first.</div>'; return; }
+
+    var nextR = PM.nextRoundFor(s, draft.method);
+    var opts = '';
+    for (var i = 1; i <= Math.max(drawn, 1); i++) opts += '<option value="' + i + '"' + (i === r ? ' selected' : '') + '>Round ' + i + '</option>';
+    var hasRes = complete > 0;
+    var methodOpts = PM.METHODS.map(function (m) { return '<option value="' + m.id + '"' + (m.id === draft.method ? ' selected' : '') + '>' + m.label + '</option>'; }).join('');
+    var firstOpts = PM.FIRST_ROUND.map(function (m) { return '<option value="' + m.id + '"' + (m.id === draft.firstRound ? ' selected' : '') + '>' + m.label + '</option>'; }).join('');
+    var missing = s.players.filter(function (pl) { return pl.missing; }).map(function (pl) { return esc(PM.displayName(pl.name)); });
+
+    var h = '<div class="card"><h2>Draw – Division ' + esc(s.name) + '</h2>' +
+      '<p class="hint">' + complete + ' round' + (complete === 1 ? '' : 's') + ' complete, ' + drawn + ' drawn.</p>' +
+      '<div class="row"><label>Method</label><select id="d-method">' + methodOpts + '</select></div>' +
+      (!hasRes ? '<div class="row"><label>First round</label><select id="d-first">' + firstOpts + '</select></div>' : '') +
+      (draft.method === 'australian' || draft.method === 'lagged'
+        ? '<div class="row"><label>Fresh start with game</label><input id="d-fresh" type="number" min="1" style="width:70px" value="' + draft.freshStart + '"><span class="hint">Leave at 1 unless you want to allow rematches against opponents from before that game.</span></div>' : '') +
+      gibsonBlock(s, nextR) +
+      (missing.length ? '<p class="pill warn">Marked missing (designated loss): ' + missing.join(', ') + '</p>' : '') +
+      '<div class="row"><button id="d-go" class="' + (nextR <= drawn ? '' : 'primary') + '">' +
+      (draft.method === 'roundrobin' ? 'Draw round robin from round ' + nextR : (nextR <= drawn ? 'Redraw round ' : 'Draw round ') + nextR) +
+      '</button>' + (nextR <= drawn ? '<span class="hint">Round ' + nextR + ' is drawn. Enter its scores, then draw round ' + (nextR + 1) + '.</span>' : '') +
+      '</div></div>';
+
+    h += '<div class="card"><div class="row"><h2 style="margin:0">Pairings &amp; scores</h2><select id="r-pick">' + opts + '</select>';
+    if (r <= drawn) {
+      var miss = PM.missingResults(s, r);
+      h += miss.length ? '<span id="r-pill" class="pill warn">' + miss.length + ' score' + (miss.length === 1 ? '' : 's') + ' to enter</span>'
+        : '<span id="r-pill" class="pill">All results in</span>';
+      h += '<span class="spacer"></span><button id="r-clear" class="small danger">Clear this round</button>';
+    }
+    h += '</div>';
+    if (r > drawn) {
+      h += '<p class="hint">Round ' + r + ' has not been drawn yet.</p></div>';
+      main.innerHTML = h; bindDraw(s); return;
+    }
+    var tables = PM.assignTables(st.t, r);
+    var order = PM.standings(st.t, s, r - 1).map(function (x) { return x.idx; });
+    var shown = {}, rows = [], byes = [];
+    order.forEach(function (p) {
+      if (shown[p]) return;
+      var g = PM.game(s, p, r);
+      if (!g) return;
+      shown[p] = true;
+      if (g.opp === p) { byes.push(p); return; }
+      shown[g.opp] = true;
+      var a = p, b = g.opp;
+      rows.push({ a: a, b: b, table: tables[st.sec + ':' + a] });
+    });
+    rows.sort(function (x, y) { return (x.table || 0) - (y.table || 0); });
+    var playerOpts = function (sel) {
+      return '<option value="">Change opponent…</option>' + s.players.map(function (pl, q) {
+        return q === sel ? '' : '<option value="' + q + '">' + nm(s, q) + '</option>';
+      }).join('');
+    };
+    h += '<p class="hint">Type a score and press Enter to jump to the next box. <span class="starter">*</span> = starts the game. Click ⇄ to change who starts.</p>' +
+      '<div class="row"><input id="r-find" placeholder="Find a player…" size="24"></div>' +
+      '<table><thead><tr><th class="num">Table</th><th>Player</th><th class="num">Score</th><th class="num">Score</th><th>Opponent</th><th>Result</th><th></th></tr></thead><tbody>';
+    rows.forEach(function (row) {
+      var ga = PM.game(s, row.a, r), gb = PM.game(s, row.b, r);
+      h += '<tr data-row="' + row.a + ' ' + row.b + '"><td class="num">' + (row.table || '') + '</td>' +
+        '<td><span class="starter">' + (ga.first ? '*' : '') + '</span>' + nm(s, row.a) + '</td>' +
+        '<td class="num"><input class="score" inputmode="numeric" data-score="' + row.a + '" value="' + (ga.score || '') + '"></td>' +
+        '<td class="num"><input class="score" inputmode="numeric" data-score="' + row.b + '" value="' + (gb.score || '') + '"></td>' +
+        '<td><span class="starter">' + (gb.first ? '*' : '') + '</span>' + nm(s, row.b) + '</td>' +
+        '<td class="result" id="res-' + row.a + '">' + resultText(s, row.a, r) + '</td>' +
+        '<td class="actions"><button class="small" data-toggle="' + row.a + '" title="Change who starts">⇄</button> ' +
+        '<select class="small" data-repair="' + row.a + '">' + playerOpts(row.a) + '</select> ' +
+        '<select class="small" data-ng="' + row.a + '"><option value="">Nongame…</option>' +
+        '<option value="L">' + nm(s, row.a) + ': designated loss</option><option value="W">' + nm(s, row.a) + ': designated win</option>' +
+        '<option value="D">' + nm(s, row.a) + ': designated draw</option>' +
+        '<option value="L' + row.b + '">' + nm(s, row.b) + ': designated loss</option><option value="W' + row.b + '">' + nm(s, row.b) + ': designated win</option>' +
+        '<option value="D' + row.b + '">' + nm(s, row.b) + ': designated draw</option></select></td></tr>';
+    });
+    byes.forEach(function (p) {
+      var g = PM.game(s, p, r), label = g.rawOpp ? 'Needs an opponent – use Pair with… or Change…'
+        : { W: 'Bye / designated win', L: 'Designated loss', D: 'Designated draw' }[g.nongame || 'D'];
+      h += '<tr><td></td><td>' + nm(s, p) + (s.players[p].missing ? ' <span class="pill warn">missing</span>' : '') + '</td><td colspan="3"><span class="pill">' + label + '</span></td><td></td>' +
+        '<td class="actions"><select class="small" data-ngself="' + p + '"><option value="">Change…</option><option value="W">Designated win</option><option value="L">Designated loss</option><option value="D">Designated draw</option></select> ' +
+        '<select class="small" data-repair="' + p + '">' + playerOpts(p).replace('Change opponent…', 'Pair with…') + '</select></td></tr>';
+    });
+    h += '</tbody></table></div>';
+
+    var hw = s.highWord || { text: '', score: 0 }, hg = PM.highGame(s);
+    h += '<div class="card"><h2>High scores – Division ' + esc(s.name) + '</h2><div class="row"><label>High word (word and player)</label>' +
+      '<input id="hw-text" size="30" value="' + esc(hw.text) + '" placeholder="QUIXOTIC Ann Lee"><label>Score</label>' +
+      '<input id="hw-score" class="score" inputmode="numeric" value="' + (hw.score || '') + '"></div>' +
+      '<p class="hint">High game: ' + (hg.score ? hg.score + ' – ' + esc(hg.names.join(', ')) : 'none yet') + '</p></div>';
+    main.innerHTML = h;
+    bindDraw(s);
+    bindRound(s, r);
+  }
+
+  function bindDraw(s) {
+    $('d-method').onchange = function () { draft.method = this.value; render(); };
+    if ($('d-first')) $('d-first').onchange = function () { draft.firstRound = this.value; };
+    if ($('d-fresh')) $('d-fresh').onchange = function () { draft.freshStart = Math.max(1, parseInt(this.value, 10) || 1); render(); };
+    if ($('g-rounds')) $('g-rounds').onchange = function () { s.totalRounds = Math.max(0, parseInt(this.value, 10) || 0); changed(); };
+    if ($('g-prizes')) $('g-prizes').onchange = function () { s.prizes = Math.max(1, parseInt(this.value, 10) || 1); changed(); };
+    if ($('g-mode')) $('g-mode').onchange = function () { s.gibsonMode = this.value; changed(); };
+    $('main').querySelectorAll('[data-gib]').forEach(function (cb) {
+      cb.onchange = function () { draft.gibUntick[st.sec + ':' + this.dataset.gib] = !this.checked; render(); };
+    });
+    if ($('r-pick')) $('r-pick').onchange = function () { st.round = +this.value; changed(); };
+    $('d-go').onclick = function () {
+      var round = PM.nextRoundFor(s, draft.method);
+      var drawn = PM.roundsDrawn(s);
+      if (draft.method === 'lagged' && round < 3) { alert('Lagged Australian can only be used from round 3. Use another method for rounds 1 and 2.'); return; }
+      var lostScores = false;
+      for (var r = round; r <= drawn; r++) for (var p = 0; p < s.players.length; p++) {
+        var g = PM.game(s, p, r); if (g && g.opp !== p && g.score > 0) lostScores = true;
+      }
+      if (round <= drawn && !confirm('Round ' + round + (drawn > round ? ' (and later rounds)' : '') + ' is already drawn' +
+        (lostScores ? ' and some scores are entered. Those scores will be lost.' : '.') + ' Redraw it?')) return;
+      var missing = s.players.filter(function (pl) { return pl.missing; }).map(function (pl) { return PM.displayName(pl.name); });
+      if (missing.length && !confirm('Still missing: ' + missing.join(', ') + '.\nThey will get a designated loss. Continue?')) return;
+      var gopts = null, cfg = gibsonCfg(s);
+      if (gibsonUsed(draft.method) && cfg.mode !== 'off' && cfg.totalRounds) {
+        var sr = draft.method === 'lagged' && round >= 3 ? round - 2 : round - 1;
+        var all = PM.gibsonPlan(st.t, s, round, cfg, sr, draft.freshStart);
+        gopts = { totalRounds: cfg.totalRounds, prizes: cfg.prizes, mode: cfg.mode, players: gibsonSelected(s, all) };
+      }
+      PM.draw(st.t, s, draft.method, { firstRound: draft.firstRound, freshStart: draft.freshStart, round: round, gibson: gopts });
+      st.round = round; changed();
+    };
+  }
+
+  function bindRound(s, r) {
+    var main = $('main');
+    if ($('r-clear')) $('r-clear').onclick = function () {
+      if (!confirm('Clear round ' + r + (PM.roundsDrawn(s) > r ? ' and every later round' : '') + '? Pairings and scores will be removed.')) return;
+      PM.blankRound(s, r); st.round = Math.max(1, r - 1); changed();
+    };
+    var inputs = Array.prototype.slice.call(main.querySelectorAll('[data-score]'));
+    inputs.forEach(function (inp, i) {
+      inp.onchange = function () {
+        var v = this.value.trim();
+        if (v !== '' && !/^\d{1,3}$/.test(v)) { alert('Enter a score from 0 to 999.'); var g0 = PM.game(s, +this.dataset.score, r); this.value = g0 && g0.score ? g0.score : ''; return; }
+        var p = +this.dataset.score;
+        PM.setScore(s, r, p, v === '' ? 0 : parseInt(v, 10));
+        var g = PM.game(s, p, r);
+        var cellA = $('res-' + p) || $('res-' + g.opp);
+        if (cellA) cellA.innerHTML = resultText(s, p, r);
+        save(); renderBanner();
+        var pill = $('r-pill');
+        var miss = PM.missingResults(s, r).length;
+        if (pill) { pill.className = miss ? 'pill warn' : 'pill'; pill.textContent = miss ? miss + ' score' + (miss === 1 ? '' : 's') + ' to enter' : 'All results in'; }
+      };
+      inp.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.onchange(); var n = inputs[i + 1]; if (n) { n.focus(); n.select(); } }
+      };
+    });
+    if ($('r-find')) $('r-find').oninput = function () {
+      var q = this.value.toLowerCase();
+      main.querySelectorAll('tr[data-row]').forEach(function (tr) {
+        var ps = tr.dataset.row.split(' ');
+        var hit = !q || ps.some(function (p) { return PM.displayName(s.players[+p].name).toLowerCase().indexOf(q) >= 0; });
+        tr.style.display = hit ? '' : 'none';
+      });
+    };
+    main.querySelectorAll('[data-toggle]').forEach(function (b) {
+      b.onclick = function () { PM.toggleStart(s, r, +b.dataset.toggle); changed(); };
+    });
+    main.querySelectorAll('[data-repair]').forEach(function (sel) {
+      sel.onchange = function () {
+        if (this.value === '') return;
+        try { PM.setPairing(s, r, +this.dataset.repair, +this.value); } catch (e) { alert(e.message); }
+        changed();
+      };
+    });
+    main.querySelectorAll('[data-ng]').forEach(function (sel) {
+      sel.onchange = function () {
+        var v = this.value; if (!v) return;
+        var kind = v.charAt(0), p = v.length > 1 ? +v.slice(1) : +this.dataset.ng;
+        var g = PM.game(s, p, r), og = g && g.opp !== p ? PM.game(s, g.opp, r) : null;
+        if (g && og && (g.score > 0 || og.score > 0) &&
+          !confirm('Scores are already entered for this game. Replace them with a designated result?')) { this.value = ''; return; }
+        var left = g && g.opp !== p ? g.opp : null;
+        PM.setNongame(s, r, p, kind); changed();
+        if (left !== null) alert(PM.displayName(s.players[left].name) + ' now has no opponent in round ' + r +
+          '. Use "Pair with…" to pair them with someone, or "Change…" to give them a bye or designated result.');
+      };
+    });
+    main.querySelectorAll('[data-ngself]').forEach(function (sel) {
+      sel.onchange = function () { if (this.value) { PM.setNongame(s, r, +this.dataset.ngself, this.value); changed(); } };
+    });
+    $('hw-text').onchange = function () { s.highWord = { text: this.value.replace(/\s+/g, ' ').trim(), score: (s.highWord || {}).score || 0 }; save(); };
+    $('hw-score').onchange = function () { s.highWord = { text: (s.highWord || {}).text || '', score: parseInt(this.value, 10) || 0 }; save(); };
+  }
+
+  // ---------- standings ----------
+  function standingsTable(s, upTo) {
+    var key = st.t.rankMethod === 'A' ? 'total' : 'spread';
+    var rows = PM.standings(st.t, s, upTo), anyBye = false;
+    var h = '<table><thead><tr><th class="num">Rank</th><th>Player</th><th class="num">Wins</th><th class="num">Losses</th><th class="num">' +
+      (key === 'total' ? 'Total' : 'Spread') + '</th><th class="num">Games</th></tr></thead><tbody>';
+    rows.forEach(function (x) {
+      var w = fmtWins(x.wins), sp = key === 'total' ? String(x.total) : fmtSigned(x.spread);
+      if (x.byes && (x.byeWins || x.byeSpread)) {
+        anyBye = true;
+        w = fmtWins(x.wins - x.byeWins) + '<sup>(+' + fmtWins(x.byeWins) + ')</sup>';
+        if (key === 'spread') sp = fmtSigned(x.spread - x.byeSpread) + '<sup>(' + fmtSigned(x.byeSpread) + ')</sup>';
+      }
+      h += '<tr><td class="num">' + x.rank + '</td><td>' + nm(s, x.idx) + (s.players[x.idx].missing ? ' <span class="hint">(missing)</span>' : '') +
+        '</td><td class="num">' + w + '</td><td class="num">' + fmtWins(x.losses) + '</td><td class="num">' + sp + '</td><td class="num">' + x.games + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    if (anyBye) h += '<p class="hint">Bye and designated results are shown in brackets; they count for placings but not ratings.</p>';
+    return h;
+  }
+  function highLines(s) {
+    var hg = PM.highGame(s), hw = s.highWord || {};
+    return '<p>' + (hg.score ? '<b>High game:</b> ' + esc(hg.names.join(', ')) + ' ' + hg.score : '') +
+      (hw.score ? ' &nbsp; <b>High word:</b> ' + esc(hw.text) + ' ' + hw.score : '') + '</p>';
+  }
+  function renderStandings(main) {
+    var s = sec(), complete = PM.roundsComplete(s), drawn = PM.roundsDrawn(s);
+    var upTo = st.standRound === null ? complete : Math.min(st.standRound, drawn);
+    var opts = '';
+    for (var i = 0; i <= drawn; i++) opts += '<option value="' + i + '"' + (i === upTo ? ' selected' : '') + '>After round ' + i + (i > complete ? ' (incomplete)' : '') + '</option>';
+    main.innerHTML = '<div class="card"><div class="row"><h2 style="margin:0">Standings – Division ' + esc(s.name) + '</h2><select id="st-pick">' + opts + '</select></div>' +
+      standingsTable(s, upTo) + highLines(s) + '</div>';
+    $('st-pick').onchange = function () { st.standRound = +this.value; render(); };
+  }
+
+  // ---------- printing ----------
+  function pairingsPrint(s, si, r) {
+    var tables = PM.assignTables(st.t, r), prev = r - 1;
+    var stand = PM.standings(st.t, s, prev), rankOf = {};
+    stand.forEach(function (x) { rankOf[x.idx] = x; });
+    var list = s.players.map(function (pl, p) { return p; });
+    list.sort(function (a, b) { return PM.displayName(s.players[a].name).localeCompare(PM.displayName(s.players[b].name)); });
+    var key = st.t.rankMethod === 'A' ? 'total' : 'spread';
+    var h = '<h1>' + esc(s.name) + ' – Pairings for round ' + r + '</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) +
+      (prev > 0 ? ' · standings after round ' + prev : '') + '</h2><table><thead><tr><th>Player</th>' +
+      (prev > 0 ? '<th class="num">Wins</th><th class="num">' + (key === 'total' ? 'Total' : 'Spread') + '</th>' : '') +
+      '<th class="num">Table</th><th>Opponent</th></tr></thead><tbody>';
+    list.forEach(function (p) {
+      var g = PM.game(s, p, r); if (!g) return;
+      var x = rankOf[p];
+      h += '<tr><td><span class="starter">' + (g.first ? '*' : '') + '</span>' + nm(s, p) + '</td>' +
+        (prev > 0 ? '<td class="num">' + fmtWins(x.wins) + '</td><td class="num">' + (key === 'total' ? x.total : fmtSigned(x.spread)) + '</td>' : '');
+      if (g.opp === p) h += '<td></td><td>' + (g.rawOpp ? 'To be paired' : { W: 'Bye', L: 'Not playing', D: 'Designated draw' }[g.nongame || 'D']) + '</td></tr>';
+      else h += '<td class="num">' + (tables[si + ':' + p] || '') + '</td><td><span class="starter">' + (PM.game(s, g.opp, r).first ? '*' : '') + '</span>' + nm(s, g.opp) + '</td></tr>';
+    });
+    return h + '</tbody></table><p>The player with the asterisk (*) plays first.</p>';
+  }
+  function schedulePrint(s) {
+    var drawn = PM.roundsDrawn(s);
+    var h = '<h1>' + esc(s.name) + ' – Full schedule</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</h2><table><thead><tr><th>Player</th>';
+    for (var r = 1; r <= drawn; r++) h += '<th>R' + r + '</th>';
+    h += '</tr></thead><tbody>';
+    s.players.forEach(function (pl, p) {
+      h += '<tr><td>' + (p + 1) + '. ' + nm(s, p) + '</td>';
+      for (var r2 = 1; r2 <= drawn; r2++) {
+        var g = PM.game(s, p, r2);
+        h += '<td>' + (!g ? '' : g.opp === p ? 'bye' : (g.first ? '*' : '') + (g.opp + 1)) + '</td>';
+      }
+      h += '</tr>';
+    });
+    return h + '</tbody></table><p>Numbers are opponents\' numbers. * = plays first.</p>';
+  }
+  function standingsPrint(s, upTo) {
+    return '<h1>' + esc(s.name) + ' – Standings after round ' + upTo + '</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</h2>' +
+      standingsTable(s, upTo) + highLines(s);
+  }
+  function resultsPrint(s, si, r) {
+    var head = '<h1>' + esc(s.name) + ' – Results of round ' + r + '</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</h2>';
+    var rows = PM.roundResults(st.t, s, r);
+    if (!rows.length) return head + '<p>Round ' + r + ' has not been drawn in this division.</p>';
+    var tables = PM.assignTables(st.t, r), pending = 0;
+    var games = rows.filter(function (x) { return x.b !== null; });
+    games.sort(function (x, y) { return (tables[si + ':' + x.a] || 0) - (tables[si + ':' + y.a] || 0); });
+    function who(p, first, won) {
+      var n = nm(s, p);
+      return '<span class="starter">' + (first ? '*' : '') + '</span>' + (won ? '<b>' + n + '</b>' : n);
+    }
+    var h = head + '<table><thead><tr><th class="num">Table</th><th>Player</th><th class="num">Score</th><th class="num">Score</th><th>Opponent</th><th>Result</th></tr></thead><tbody>';
+    games.forEach(function (x) {
+      var res = x.outcome === 'win' ? nm(s, x.winner) + ' won by ' + x.margin : x.outcome === 'tie' ? 'Tie' : 'Result not entered';
+      if (x.outcome === 'pending') pending++;
+      h += '<tr><td class="num">' + (tables[si + ':' + x.a] || '') + '</td><td>' + who(x.a, x.aFirst, x.winner === x.a) + '</td>' +
+        '<td class="num">' + (x.aScore || '') + '</td><td class="num">' + (x.bScore || '') + '</td>' +
+        '<td>' + who(x.b, x.bFirst, x.winner === x.b) + '</td><td>' + res + '</td></tr>';
+    });
+    rows.filter(function (x) { return x.b === null; }).forEach(function (x) {
+      var label = x.nongame === null ? 'Needs an opponent' : { W: 'Bye (counts as a win)', L: 'Designated loss', D: 'Designated draw' }[x.nongame];
+      h += '<tr><td></td><td>' + nm(s, x.a) + '</td><td colspan="4">' + label + '</td></tr>';
+    });
+    h += '</tbody></table><p>* = played first.' + (pending ? ' <b>' + pending + ' result' + (pending === 1 ? ' is' : 's are') + ' not entered yet.</b>' : '') + '</p>';
+    if (st.printWithStandings) {
+      h += '<h2 style="margin-top:16px">Standings after round ' + r + (PM.isRoundComplete(s, r) ? '' : ' (round not finished)') + '</h2>' + standingsTable(s, r);
+    }
+    return h;
+  }
+  var RESULT_TEXT = { W: 'Won', L: 'Lost', T: 'Tie', bye: 'Bye', dL: 'Desig. loss', dD: 'Desig. draw', pending: '', '': '' };
+  function scorecardsPrint(s, si) {
+    var rounds = Math.max(PM.roundsDrawn(s), s.totalRounds || 0, 1);
+    var order = s.players.map(function (pl, p) { return p; });
+    order.sort(function (a, b) { return PM.displayName(s.players[a].name).localeCompare(PM.displayName(s.players[b].name)); });
+    var h = '<div class="cards">', tableCache = {};
+    order.forEach(function (p) {
+      var rows = PM.scorecard(st.t, s, p, rounds, tableCache);
+      h += '<div class="scorecard"><div class="sc-head"><b>' + nm(s, p) + '</b> <span>#' + (p + 1) + ' · Division ' + esc(s.name) +
+        '</span></div><div class="sc-sub">' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</div>' +
+        '<table><thead><tr><th class="num">Rd</th><th class="num">Tbl</th><th>Opponent</th><th>1st</th><th class="num">For</th><th class="num">Agst</th><th>Result</th><th class="num">Wins</th><th class="num">Spread</th></tr></thead><tbody>';
+      rows.forEach(function (x) {
+        h += '<tr><td class="num">' + x.round + '</td><td class="num">' + (x.table || '') + '</td><td>' +
+          (x.opp !== null ? '#' + (x.opp + 1) + ' ' + nm(s, x.opp) : '') + '</td><td>' + (x.first ? '*' : '') + '</td>' +
+          '<td class="num">' + (x.score !== null ? x.score : '') + '</td><td class="num">' + (x.oppScore !== null ? x.oppScore : '') + '</td>' +
+          '<td>' + RESULT_TEXT[x.result] + '</td><td class="num">' + (x.wins !== null ? fmtWins(x.wins) : '') + '</td>' +
+          '<td class="num">' + (x.spread !== null ? fmtSigned(x.spread) : '') + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    });
+    return '<h1>' + esc(s.name) + ' – Scorecards</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + ' · * = played first</h2>' + h + '</div>';
+  }
+  function wallChartPrint(s) {
+    var wc = PM.wallChart(st.t, s);
+    var h = '<h1>' + esc(s.name) + ' – Wall chart</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) +
+      ' · each box: opponent number (* = went first), result and margin</h2>';
+    if (!wc.rounds) return h + '<p>No rounds drawn yet.</p>';
+    h += '<table class="wall"><thead><tr><th class="num">#</th><th>Player</th>';
+    for (var r = 1; r <= wc.rounds; r++) h += '<th>R' + r + '</th>';
+    h += '<th class="num">Wins</th><th class="num">Spread</th><th class="num">Rank</th></tr></thead><tbody>';
+    wc.rows.forEach(function (row) {
+      h += '<tr><td class="num">' + (row.idx + 1) + '</td><td>' + nm(s, row.idx) + '</td>';
+      row.cells.forEach(function (c) {
+        var txt = '';
+        if (c) {
+          var o = c.opp !== null ? (c.opp + 1) + (c.first ? '*' : '') + ' ' : '';
+          txt = c.result === 'W' ? o + 'W+' + c.margin : c.result === 'L' ? o + 'L−' + c.margin : c.result === 'T' ? o + 'T'
+            : c.result === 'bye' ? 'bye' : c.result === 'dL' ? 'd.loss' : c.result === 'dD' ? 'd.draw' : o + '…';
+        }
+        h += '<td class="' + (c && c.result === 'W' ? 'w' : '') + '">' + txt + '</td>';
+      });
+      h += '<td class="num">' + fmtWins(row.wins) + '</td><td class="num">' + fmtSigned(row.spread) + '</td><td class="num">' + row.rank + '</td></tr>';
+    });
+    return h + '</tbody></table>';
+  }
+  function defaultPrintRound() {
+    var s = sec(), c = PM.roundsComplete(s);
+    return c || PM.roundsDrawn(s) || 1;
+  }
+  function buildPrint() {
+    var secs = st.printSecs === 'all' ? st.t.sections.map(function (x, i) { return i; }) : [st.sec];
+    return secs.map(function (si, n) {
+      var s = st.t.sections[si], out;
+      if (st.printWhat === 'pairings') {
+        var r = PM.roundsDrawn(s);
+        out = r ? pairingsPrint(s, si, Math.max(1, Math.min(r, PM.roundsComplete(s) + 1))) : '<h1>' + esc(s.name) + '</h1><p>No draw yet.</p>';
+      } else if (st.printWhat === 'schedule') out = schedulePrint(s);
+      else if (st.printWhat === 'results') out = resultsPrint(s, si, st.printRound || defaultPrintRound());
+      else if (st.printWhat === 'scorecards') out = scorecardsPrint(s, si);
+      else if (st.printWhat === 'wallchart') out = wallChartPrint(s);
+      else out = standingsPrint(s, PM.roundsComplete(s));
+      return (n ? '<div class="page-break"></div>' : '') + out;
+    }).join('');
+  }
+  function renderPrint(main) {
+    var what = [['pairings', 'Pairings for the current round'], ['results', 'Results for a round'], ['standings', 'Standings'],
+      ['scorecards', 'Scorecards (one per player)'], ['wallchart', 'Wall chart'], ['schedule', 'Full schedule (round robin)']];
+    var maxR = st.t.sections.reduce(function (m, x) { return Math.max(m, PM.roundsDrawn(x)); }, 0);
+    var pr = Math.min(st.printRound || defaultPrintRound(), Math.max(1, maxR));
+    var roundPick = '';
+    if (st.printWhat === 'results') {
+      for (var i = 1; i <= Math.max(1, maxR); i++) roundPick += '<option value="' + i + '"' + (i === pr ? ' selected' : '') + '>Round ' + i + '</option>';
+      roundPick = '<select id="pr-round">' + roundPick + '</select><label><input type="checkbox" id="pr-stand"' + (st.printWithStandings ? ' checked' : '') + '> include standings after that round</label>';
+    }
+    main.innerHTML = '<div class="card"><h2>Print</h2><div class="row"><select id="pr-what">' +
+      what.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === st.printWhat ? ' selected' : '') + '>' + w[1] + '</option>'; }).join('') +
+      '</select><select id="pr-secs"><option value="all"' + (st.printSecs === 'all' ? ' selected' : '') + '>All divisions (one per page)</option><option value="one"' +
+      (st.printSecs === 'one' ? ' selected' : '') + '>Division ' + esc(sec().name) + ' only</option></select>' + roundPick +
+      '<button id="pr-go" class="primary">Print…</button></div>' +
+      '<details><summary class="hint">Tools</summary><p class="hint">Before sending the .TOU file to the ratings officer, remove table markers like @12, @R and (N) from names.</p>' +
+      '<button id="pr-clean" class="small">Clean markers from all names</button></details></div>' +
+      '<div class="preview" id="pr-preview">' + buildPrint() + '</div>';
+    $('pr-what').onchange = function () { st.printWhat = this.value; render(); };
+    $('pr-secs').onchange = function () { st.printSecs = this.value; render(); };
+    if ($('pr-round')) $('pr-round').onchange = function () { st.printRound = +this.value; render(); };
+    if ($('pr-stand')) $('pr-stand').onchange = function () { st.printWithStandings = this.checked; render(); };
+    $('pr-go').onclick = function () {
+      $('print-area').innerHTML = buildPrint();
+      var land = null;
+      if (st.printWhat === 'wallchart') { land = document.createElement('style'); land.textContent = '@page { size: landscape; }'; document.head.appendChild(land); }
+      window.print();
+      if (land) land.remove();
+    };
+    $('pr-clean').onclick = function () {
+      if (!confirm('Remove @12, @R and (N) markers from every player name? Fixed tables will no longer apply.')) return;
+      PM.cleanMarkers(st.t); changed();
+    };
+  }
+
+  // ---------- top bar ----------
+  function init() {
+    if (!load()) { freshTournament(); save(); }
+    try { render(); } catch (e) {
+      try { localStorage.setItem(STORE_KEY + '.damaged', localStorage.getItem(STORE_KEY)); } catch (e2) { /* ignore */ }
+      alert('The autosaved tournament could not be shown, so a new one has been started. The damaged copy was kept. Open your latest .TOU file to carry on.');
+      freshTournament(); save();
+    }
+    Array.prototype.forEach.call($('tabs').children, function (b) {
+      b.onclick = function () { st.tab = b.dataset.tab; if (st.tab === 'round') st.round = defaultRound(sec()); changed(); };
+    });
+    $('btn-new').onclick = function () {
+      if (!confirm('Start a new tournament? Save a .TOU file of the current one first if you need it.')) return;
+      freshTournament(); changed();
+    };
+    $('btn-save').onclick = saveTou;
+    $('btn-open').onclick = openTou;
+    $('btn-folder').onclick = chooseFolder;
+    if (canFolder) idb('get').then(function (h) { folder = h; renderFolder(); });
+    $('file-input').onchange = function () {
+      var f = this.files[0]; if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () { openTouText(f.name, reader.result); };
+      reader.readAsText(f);
+    };
+    window.addEventListener('beforeprint', function () { if (!$('print-area').innerHTML) $('print-area').innerHTML = buildPrint(); });
+    window.addEventListener('afterprint', function () { $('print-area').innerHTML = ''; });
+    render();
+  }
+  if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', init);
+})(PM);
+
+</script>
+</body>
+</html>

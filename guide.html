@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>PairMaster Guide</title>
+<style>
+:root { --bg: #fbfaf7; --fg: #1d2420; --muted: #5d6862; --accent: #1f6b45; --line: #dfe3df; --card: #ffffff; --warn: #8a5a00; --warnbg: #fff6e0; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151917; --fg: #e6ebe7; --muted: #9aa69f; --accent: #6fcf9b; --line: #2c3430; --card: #1c211e; --warn: #f0c060; --warnbg: #2e2814; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 30px; margin: 0 0 4px; color: var(--accent); }
+h2 { font-size: 21px; margin: 40px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+h3 { font-size: 17px; margin: 24px 0 6px; }
+p, li { max-width: 68ch; }
+.lead { color: var(--muted); margin-top: 0; }
+nav ol { columns: 2; column-gap: 32px; padding-left: 20px; }
+@media (max-width: 560px) { nav ol { columns: 1; } }
+a { color: var(--accent); }
+code, kbd { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.note { background: var(--warnbg); color: var(--fg); border-left: 4px solid var(--warn); padding: 10px 14px; border-radius: 4px; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; }
+.wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>PairMaster guide</h1>
+<p class="lead">Pairings, results and standings for Scrabble tournaments. Works offline, saves AuPair-compatible <code>.TOU</code> files.</p>
+
+<nav><ol>
+  <li><a href="#start">Getting started</a></li>
+  <li><a href="#saving">Saving your work</a></li>
+  <li><a href="#players">Players and divisions</a></li>
+  <li><a href="#draw">Drawing a round</a></li>
+  <li><a href="#scores">Entering scores</a></li>
+  <li><a href="#byes">Byes, designated results, missing players</a></li>
+  <li><a href="#gibson">Gibsonization</a></li>
+  <li><a href="#standings">Standings</a></li>
+  <li><a href="#print">Printing</a></li>
+  <li><a href="#tou">AuPair and ratings</a></li>
+  <li><a href="#trouble">Problems and questions</a></li>
+</ol></nav>
+
+<h2 id="start">1. Getting started</h2>
+<p>PairMaster is a single file, <code>PairMaster.html</code>. Nothing is installed and no internet connection is needed: double-click the file and it opens in your web browser.</p>
+<ul>
+  <li><b>Best in Google Chrome or Microsoft Edge</b> (Windows or Mac). These let PairMaster save straight into a folder you choose.</li>
+  <li>Safari and Firefox also work, but every saved file goes to your Downloads folder.</li>
+  <li>Use a laptop or desktop. Phones and tablets are not supported.</li>
+</ul>
+<p>The screen has four tabs: <b>Players</b>, <b>Rounds &amp; scores</b>, <b>Standings</b> and <b>Print</b>. Divisions appear as buttons under the tabs; click one to switch.</p>
+
+<h2 id="saving">2. Saving your work</h2>
+<p>PairMaster saves everything automatically inside your browser as you type. That copy belongs to that browser on that computer only, and is lost if the browser's data is cleared.</p>
+<div class="note"><b>Save a <code>.TOU</code> file after every round.</b> A yellow reminder bar appears when a round has finished since your last save. The <code>.TOU</code> file is your real backup: you can open it on any computer, in PairMaster or in AuPair.</div>
+<ul>
+  <li><b>Save .TOU</b>: the first time, Chrome/Edge ask you to pick a folder (for example Documents → PairMaster). After that, files go there. The folder button next to it shows or changes the folder.</li>
+  <li><b>Open .TOU</b>: opens a <code>.TOU</code> file saved by PairMaster or by AuPair. The tournament on screen is replaced, so save it first if you need it.</li>
+  <li><b>New</b>: starts an empty tournament.</li>
+</ul>
+<p>File names follow AuPair's rule: up to 8 letters or digits, then <code>.TOU</code> (for example <code>KLOPEN26.TOU</code>).</p>
+
+<h2 id="players">3. Players and divisions</h2>
+<p>On the <b>Players</b> tab, set the date, title and how ties are ranked (by <b>spread</b>, the usual choice, or by <b>total score</b>).</p>
+<ul>
+  <li><b>Enter players in rating order, highest first.</b> The first-round draw and table order depend on it. Type a name and press Enter, or paste a whole list (one name per line).</li>
+  <li><b>↑ ↓</b> move a player; <b>Sort A–Z</b> sorts by name.</li>
+  <li><b>+ Add division</b> creates another division (A, B, OPEN, SCHOOLS…). Before the first draw you can move a player to another division, remove players, or delete a division.</li>
+  <li>Names are up to 20 characters (the <code>.TOU</code> limit).</li>
+</ul>
+<h3>Fixed tables</h3>
+<p>Add <code>@12</code> to a name to keep that player at table 12 (useful for a wheelchair user or a player who needs to sit near the door). Add <code>@R</code> for a fixed table near the front. These markers are not printed. Remove them before sending the file for ratings (see <a href="#tou">section 10</a>).</p>
+<h3>After the draw has started</h3>
+<p>Players can no longer be removed. If someone leaves, tick <b>Missing</b>: they get a designated loss each round and are left out of the draw until you untick it. A player added late gets designated losses for the rounds already played.</p>
+
+<h2 id="draw">4. Drawing a round</h2>
+<p>On <b>Rounds &amp; scores</b>, choose a method and click <b>Draw round N</b>.</p>
+<div class="wrap"><table>
+  <tr><th>Method</th><th>Use it for</th></tr>
+  <tr><td>Australian draw</td><td>The normal Swiss draw: players on similar scores meet, with no rematches. You can ask for a “fresh start” from a later game (rematches from before that game are then allowed).</td></tr>
+  <tr><td>Lagged Australian</td><td>From round 3: pairs using standings from two rounds back, so you can post the next draw before the current round ends.</td></tr>
+  <tr><td>King of the Hill</td><td>Usually the last round: 1st v 2nd, 3rd v 4th… Rematches allowed.</td></tr>
+  <tr><td>Round robin</td><td>Everyone plays everyone. The whole schedule is drawn at once.</td></tr>
+  <tr><td>Halves / Quarters</td><td>Top half v bottom half, or 1st v 2nd and 3rd v 4th within quarters.</td></tr>
+  <tr><td>Chance</td><td>Random pairings.</td></tr>
+</table></div>
+<p><b>Round 1</b> has its own options: quarters (1st v 3rd and 2nd v 4th, or 1st v 2nd and 3rd v 4th), halves, or chance, based on the order you entered players.</p>
+<ul>
+  <li>With an odd number of players, the lowest-placed player who hasn't had a bye gets it. A bye counts as a win by 1 (shown in brackets in the standings).</li>
+  <li>Starts are balanced: PairMaster tracks who went first. An asterisk <code>*</code> marks who starts; click <b>⇄</b> to swap.</li>
+  <li><b>Change opponent…</b> changes one pairing by hand; the two players left over are paired together.</li>
+  <li><b>Clear this round</b> removes a round (and any later ones) so you can draw again.</li>
+</ul>
+
+<h2 id="scores">5. Entering scores</h2>
+<p>Type each player's score and press Enter to move to the next box. The result (“Grace Lim wins by 45”) appears as you go, and the counter shows how many scores are still to enter. The <b>Find a player…</b> box finds a game quickly.</p>
+<p>A score under 10 counts as not entered yet. If a score is wrong, just type over it.</p>
+<p>Below the scores you can record the division's <b>high word</b> (the word and player, for example <code>QUIXOTIC Ann Lee</code>, and its score). The high game is found automatically.</p>
+
+<h2 id="byes">6. Byes, designated results, missing players</h2>
+<p>Use <b>Change…</b> (or <b>Nongame…</b>) to give a player a designated <b>win</b>, <b>loss</b> or <b>draw</b> instead of a game (for example a forfeit). As in AuPair:</p>
+<ul>
+  <li>a designated win counts as a win by 1, a loss as a loss by 0, a draw as half a win with no spread;</li>
+  <li>their opponent is <b>left without an opponent</b> and is marked “Needs an opponent”. Pair them with someone using <b>Pair with…</b>, or give them their own result with <b>Change…</b>. Nothing is decided for them automatically.</li>
+</ul>
+<p>Designated results count for placings, not for ratings, and are shown in brackets in the standings: for example <code>3 (+1)</code> means 3 wins from games plus 1 from a bye.</p>
+
+<h2 id="gibson">7. Gibsonization</h2>
+<p>When a player has clinched a prize place and can't be caught, Gibsonization stops them affecting the race for the remaining places. In the Gibsonization panel (shown for Australian, Lagged and King of the Hill draws):</p>
+<ol>
+  <li>enter the <b>total rounds in this division for the whole event</b> (not the round you are drawing: for a 12-round event enter 12, even when drawing round 11) and the number of prizes;</li>
+  <li>choose who is Gibsonized: only a player who has clinched 1st, or anyone whose prize place is decided.</li>
+</ol>
+<p>PairMaster lists who has clinched (judged on wins). With an odd number of players a Gibsonized player takes the bye; otherwise they play the highest-ranked player out of the prizes. Untick anyone you don't want Gibsonized.</p>
+
+<h2 id="standings">8. Standings</h2>
+<p>Standings rank by wins, then spread (or total score, if you chose that). Use the picker to see the standings after any earlier round.</p>
+
+<h2 id="print">9. Printing</h2>
+<p>On the <b>Print</b> tab choose what to print, for all divisions (one per page) or just this one, then click <b>Print…</b>. To make a PDF, choose “Save as PDF” in the print window.</p>
+<ul>
+  <li><b>Pairings</b> for the current round, with table numbers.</li>
+  <li><b>Results</b> for any round, optionally with the standings after it.</li>
+  <li><b>Standings</b>.</li>
+  <li><b>Scorecards</b>: one per player, round by round, with blank rows for rounds still to come.</li>
+  <li><b>Wall chart</b>: every player's results in a grid (prints landscape).</li>
+  <li><b>Full schedule</b> for a round robin.</li>
+</ul>
+
+<h2 id="tou">10. AuPair and ratings</h2>
+<p>PairMaster reads and writes AuPair 6.16 <code>.TOU</code> files exactly as AuPair does, so you can move a tournament between the two at any point, and send the file to your ratings officer as before.</p>
+<p>Before sending it for ratings, open <b>Print → Tools → Clean markers</b> to remove <code>@12</code>, <code>@R</code> and <code>(…)</code> notes from names.</p>
+<p>If you open a damaged <code>.TOU</code> file, PairMaster lists the problems it found (for example “opponent number 99 does not exist”) before opening it, and marks those games “Needs an opponent” so you can fix them.</p>
+
+<h2 id="trouble">11. Problems and questions</h2>
+<h3>My tournament disappeared</h3>
+<p>The browser's own copy was cleared, or you opened PairMaster in a different browser. Open your latest <code>.TOU</code> file.</p>
+<h3>It says the autosaved tournament could not be shown</h3>
+<p>The browser's copy was damaged. PairMaster keeps the damaged copy, starts fresh, and you carry on by opening your latest <code>.TOU</code> file.</p>
+<h3>Files go to Downloads instead of my folder</h3>
+<p>Your browser doesn't support choosing a folder. Use Chrome or Edge, or move the files from Downloads yourself.</p>
+<h3>Is my data sent anywhere?</h3>
+<p>No. PairMaster has no server and is blocked from making any internet connection. Your tournament stays on your computer.</p>
+
+<p class="lead" style="margin-top:48px">PairMaster 1.0 by Mohamad Azlan Omar · free software under the MIT licence. Not affiliated with the authors of AuPair or TSH.</p>
+</main>
+</body>
+</html>
