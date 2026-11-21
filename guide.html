@@ -64,6 +64,7 @@ th { color: var(--muted); font-weight: 600; }
   <li><b>Save .TOU</b>: the first time, Chrome/Edge ask you to pick a folder (for example Documents → PairMaster). After that, files go there. The folder button next to it shows or changes the folder.</li>
   <li><b>Open .TOU</b>: opens a <code>.TOU</code> file saved by PairMaster or by AuPair. The tournament on screen is replaced, so save it first if you need it.</li>
   <li><b>New</b>: starts an empty tournament.</li>
+  <li><b>↶ Undo</b> (or Ctrl+Z / Cmd+Z when you are not typing in a box): takes back the last change, such as a wrong designated result, a redraw, a cleared round, a score or even opening a file. Click it again to go further back (up to 60 steps). Undo forgets its steps when you close or reload the page.</li>
 </ul>
 <p>File names follow AuPair's rule: up to 8 letters or digits, then <code>.TOU</code> (for example <code>KLOPEN26.TOU</code>).</p>
 
@@ -71,6 +72,7 @@ th { color: var(--muted); font-weight: 600; }
 <p>On the <b>Players</b> tab, set the date, title and how ties are ranked (by <b>spread</b>, the usual choice, or by <b>total score</b>).</p>
 <ul>
   <li><b>Enter players in rating order, highest first.</b> The first-round draw and table order depend on it. Type a name and press Enter, or paste a whole list (one name per line).</li>
+  <li><b>Avoid pairing players from the same school or club</b> (off unless you tick it, for each division): a <b>School / club</b> column appears. Type each player's school next to their name. When pasting a list, put it after a comma or a tab (<code>Ann Lee, Hillview School</code>), or copy two columns from a spreadsheet. Capitals and extra spaces don't matter. See <a href="#draw">section 4</a>.</li>
   <li><b>↑ ↓</b> move a player; <b>Sort A–Z</b> sorts by name.</li>
   <li><b>+ Add division</b> creates another division (A, B, OPEN, SCHOOLS…). Before the first draw you can move a player to another division, remove players, or delete a division.</li>
   <li>Names are up to 20 characters (the <code>.TOU</code> limit).</li>
@@ -91,6 +93,9 @@ th { color: var(--muted); font-weight: 600; }
   <tr><td>Halves / Quarters</td><td>Top half v bottom half, or 1st v 2nd and 3rd v 4th within quarters.</td></tr>
   <tr><td>Chance</td><td>Random pairings.</td></tr>
 </table></div>
+<h3>Players from the same school or club</h3>
+<p>When <b>Avoid pairing players from the same school or club</b> is ticked on the Players tab, the Australian and Lagged draws avoid pairing players from the same one, and so do round 1 and the Quarters and Chance draws. If the quarters (or halves) of round 1 would put two schoolmates together, PairMaster swaps opponents with the nearest game that fixes it, so a player may meet someone from the next quarter instead; the top half still always plays the bottom half. Rematches are still avoided first: schoolmates only meet when the only alternative is a rematch, or when one school has more than half the players left to pair. Players with no school can be paired with anyone. Untick the box to stop (the schools you typed are kept, in case you tick it again). King of the Hill, Halves and Round robin ignore schools. A game between schoolmates is marked <b>same school</b> on the scores screen.</p>
+<p>Schools are not part of the <code>.TOU</code> file, so AuPair and the ratings officer never see them. When you open a <code>.TOU</code>, PairMaster keeps the schools of players with the same name in the division on screen; on another computer, type them in again.</p>
 <p><b>Round 1</b> has its own options: quarters (1st v 3rd and 2nd v 4th, or 1st v 2nd and 3rd v 4th), halves, or chance, based on the order you entered players.</p>
 <ul>
   <li>With an odd number of players, the lowest-placed player who hasn't had a bye gets it. A bye counts as a win by 1 (shown in brackets in the standings).</li>
@@ -126,9 +131,10 @@ th { color: var(--muted); font-weight: 600; }
 <h2 id="print">9. Printing</h2>
 <p>On the <b>Print</b> tab choose what to print, for all divisions (one per page) or just this one, then click <b>Print…</b>. To make a PDF, choose “Save as PDF” in the print window.</p>
 <ul>
-  <li><b>Pairings</b> for the current round, with table numbers.</li>
+  <li><b>Pairings</b> for the current round, with table numbers, or for any earlier round (to reprint a lost sheet).</li>
   <li><b>Results</b> for any round, optionally with the standings after it.</li>
-  <li><b>Standings</b>.</li>
+  <li><b>Standings</b> after the last finished round, or after any earlier round.</li>
+  <li><b>Prize list</b>: the top places (set how many; this is the same number as Gibsonization's prizes), the highest win, highest losing score, high game, best spread and high word, worked out after the last finished round. Players tied on wins and spread share a place, and all ties are listed. Byes and designated results don't count for the game prizes. Class or newcomer prizes are not worked out yet.</li>
   <li><b>Scorecards</b>: one per player, round by round, with blank rows for rounds still to come.</li>
   <li><b>Wall chart</b>: every player's results in a grid (prints landscape).</li>
   <li><b>Full schedule</b> for a round robin.</li>
@@ -136,7 +142,7 @@ th { color: var(--muted); font-weight: 600; }
 
 <h2 id="tou">10. AuPair and ratings</h2>
 <p>PairMaster reads and writes AuPair 6.16 <code>.TOU</code> files exactly as AuPair does, so you can move a tournament between the two at any point, and send the file to your ratings officer as before.</p>
-<p><b>Before switching to AuPair mid-event</b>, make sure no game says “Needs an opponent”: give that player a pairing or a result first. AuPair itself garbles that marker when it reopens a file.</p>
+<p><b>Before switching to AuPair mid-event</b>, make sure no game says “Needs an opponent”: give that player a pairing or a result first. AuPair itself garbles that marker when it reopens a file: the player then seems to play a high number such as 245. If you open such a file, PairMaster says so, shows that player as “Needs an opponent”, and you can pair them or give them a result.</p>
 <p>Before sending it for ratings, open <b>Print → Tools → Clean markers</b> to remove <code>@12</code>, <code>@R</code> and <code>(…)</code> notes from names.</p>
 <p>If you open a damaged <code>.TOU</code> file, PairMaster lists the problems it found (for example “opponent number 99 does not exist”) before opening it, and marks those games “Needs an opponent” so you can fix them.</p>
 
@@ -148,7 +154,7 @@ th { color: var(--muted); font-weight: 600; }
 <h3>Files go to Downloads instead of my folder</h3>
 <p>Your browser doesn't support choosing a folder. Use Chrome or Edge, or move the files from Downloads yourself.</p>
 <h3>Is my data sent anywhere?</h3>
-<p>No. PairMaster has no server and is blocked from making any internet connection. Your tournament stays on your computer.</p>
+<p>No. PairMaster has no server and is blocked from making any internet connection. Your tournament stays on your computer. The only link out is <b>Help</b>: when you are online it opens this guide's web page in a new tab, and nothing from your tournament goes with it.</p>
 
 <p class="lead" style="margin-top:48px">PairMaster 1.0.1 by Mohamad Azlan Omar · free software under the MIT licence. Not affiliated with the authors of AuPair or TSH.</p>
 </main>

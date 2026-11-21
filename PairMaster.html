@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-U+njz9T+2CKsRLFCmsGo/9OGNsNcGvQIj5lV35u15Bw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-MZQL2QOTMzJwsFs0DWCMDsxMBRPDlQrnxRcqHmFSGO4='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>PairMaster</title>
 <style>
 :root {
@@ -28,7 +28,7 @@ button.primary { background: var(--accent); color: var(--accent-ink); border-col
 button.danger { color: var(--loss); }
 button.small { padding: 2px 8px; font-size: 13px; }
 button:disabled { opacity: .45; cursor: default; }
-input, select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+input, select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100%; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .topbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .brand { font-weight: 700; letter-spacing: .2px; color: var(--accent); }
@@ -46,7 +46,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .sections .chip { border-radius: 999px; }
 .sections .chip.active { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 main { padding: 16px; max-width: 1100px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; overflow-x: auto; }  /* wide tables scroll inside the card on small screens */
 .card h2 { margin: 0 0 10px; font-size: 16px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 .row label { color: var(--muted); font-size: 13px; }
@@ -106,11 +106,12 @@ table.wall td.w { font-weight: 600; }
 </head>
 <body>
 <header class="topbar no-print">
-  <div class="brand">PairMaster <span class="version">1.0.1</span></div>
+  <div class="brand">PairMaster <span class="version">1.1</span></div>
   <div class="event" id="event-label"></div>
   <div class="spacer"></div>
   <span class="saved" id="saved-label"></span>
-  <a class="help" href="guide.html" target="_blank" rel="noopener" title="User guide (guide.html, next to this file)">Help</a>
+  <a class="help" id="btn-help" href="guide.html" target="_blank" rel="noopener" title="User guide">Help</a>
+  <button id="btn-undo" title="Undo the last change (Ctrl+Z or Cmd+Z)" disabled>↶ Undo</button>
   <button id="btn-new">New</button>
   <button id="btn-folder" class="small" hidden title="Folder where .TOU files are saved"></button>
   <button id="btn-open">Open .TOU</button>
@@ -132,7 +133,7 @@ table.wall td.w { font-weight: 600; }
 // Data shapes:
 //   Tournament { date:'DD.MM.YYYY', title, rankMethod:'M'|'A', sections:[Section] }
 //   Section    { name, highWord:{text, score}, players:[Player] }
-//   Player     { name, missing:boolean, games:[Game] }   // games[round-1]
+//   Player     { name, missing:boolean, games:[Game], school?:string }   // games[round-1]; school is not in .TOU files
 //   Game       { opp:index (own index => nongame), score, first:boolean, nongame:null|'W'|'L'|'D' }
 var PM = (typeof PM !== 'undefined') ? PM : {};
 
@@ -332,9 +333,18 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         typeof t.date !== 'string' || (t.rankMethod !== 'M' && t.rankMethod !== 'A')) return false;
     return t.sections.every(function (s) {
       if (!s || typeof s.name !== 'string' || !Array.isArray(s.players)) return false;
+      // Division settings end up in the page: only plain counts, known words and text are allowed.
+      // (any whole number is harmless, and earlier versions could save e.g. a negative high-word score)
+      var count = function (v) { return v === undefined || Number.isInteger(v); };
+      if (!count(s.totalRounds) || !count(s.prizes)) return false;
+      if (s.gibsonMode !== undefined && ['off', 'first', 'decided'].indexOf(s.gibsonMode) < 0) return false;
+      if (s.avoidSameSchool !== undefined && typeof s.avoidSameSchool !== 'boolean') return false;
+      if (s.highWord !== undefined && (!s.highWord || typeof s.highWord !== 'object' ||
+          typeof s.highWord.text !== 'string' || !count(s.highWord.score))) return false;
       var n = s.players.length;
       return s.players.every(function (pl, p) {
         if (!pl || typeof pl.name !== 'string' || !Array.isArray(pl.games)) return false;
+        if (pl.school !== undefined && typeof pl.school !== 'string') return false;
         return pl.games.every(function (g, r) {
           if (g === null || g === undefined) return true; // a hole (saved as null)
           if (typeof g !== 'object' || !Number.isInteger(g.opp) || g.opp < 0 || g.opp >= n ||
@@ -345,6 +355,26 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         });
       });
     });
+  };
+
+  // .TOU files have no schools. When a .TOU replaces the tournament on screen, keep the schools of
+  // players with the same name in the division of the same name. Returns how many were kept.
+  PM.carrySchools = function (from, to) {
+    var kept = 0;
+    if (!from || !to) return 0;
+    to.sections.forEach(function (s) {
+      var old = null;
+      from.sections.forEach(function (f) { if (f.name === s.name) old = f; });
+      if (!old) return;
+      var bySchool = {};
+      old.players.forEach(function (pl) { if (pl.school) bySchool[PM.displayName(pl.name).toUpperCase()] = pl.school; });
+      s.players.forEach(function (pl) {
+        var sc = bySchool[PM.displayName(pl.name).toUpperCase()];
+        if (sc && !pl.school) { pl.school = sc; kept++; }
+      });
+      if (old.avoidSameSchool === true) s.avoidSameSchool = true;
+    });
+    return kept;
   };
 
   PM.hasGames = function (sec) { return PM.roundsDrawn(sec) > 0; };
@@ -495,7 +525,9 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
           if (!g || g.opp === p) continue;
           var og = g.opp >= 0 && g.opp < n ? s.players[g.opp].games[r] : null;
           if (!og || og.opp !== p) bad.push([p, r, og ? 'says they played ' + s.players[g.opp].name + ', who has a different opponent'
-            : g.opp >= 0 && g.opp < n ? 'says they played ' + s.players[g.opp].name + ', who has no game that round' : 'opponent number ' + (g.opp + 1) + ' does not exist']);
+            : g.opp >= 0 && g.opp < n ? 'says they played ' + s.players[g.opp].name + ', who has no game that round'
+            : g.opp >= n ? 'opponent ' + (g.opp + 1) + ' is not in this division. This is usually a player who still needed an opponent, which AuPair garbles when it reopens a file. Pair them or give them a result'
+            : 'opponent number ' + (g.opp + 1) + ' does not exist']);
         }
         if (pl.games.length < drawn) PM.lastParseWarnings.push(s.name + ': ' + pl.name + ' has no result for round ' + (pl.games.length + 1) + (drawn > pl.games.length + 1 ? '–' + drawn : ''));
       });
@@ -619,13 +651,17 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
 
   // Depth-first search: top unpaired player takes the nearest-ranked opponent he has met
   // at most maxRepeat times; backtracks on dead ends. Returns pairs or null.
-  function swiss(order, met, maxRepeat) {
-    var n = order.length, used = [], result = [], budget = 300000;
+  // same(a, b): same school or club; at most maxSame such pairs are allowed.
+  function swiss(order, met, maxRepeat, same, maxSame) {
+    var n = order.length, used = [], result = [], budget = 300000, sameUsed = 0;
+    function allowed(a, b) {
+      return met(order[a], order[b]) <= maxRepeat && (sameUsed < maxSame || !same(order[a], order[b]));
+    }
     function feasible() {
       for (var a = 0; a < n; a++) {
         if (used[a]) continue;
         var any = false;
-        for (var b = 0; b < n && !any; b++) if (b !== a && !used[b] && met(order[a], order[b]) <= maxRepeat) any = true;
+        for (var b = 0; b < n && !any; b++) if (b !== a && !used[b] && allowed(a, b)) any = true;
         if (!any) return false;
       }
       return true;
@@ -636,11 +672,12 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (i === n) return true;
       used[i] = true;
       for (var j = i + 1; j < n; j++) {
-        if (used[j] || met(order[i], order[j]) > maxRepeat) continue;
+        if (used[j] || !allowed(i, j)) continue;
         if (--budget < 0) break;
-        used[j] = true; result.push([order[i], order[j]]);
+        var sm = same(order[i], order[j]) ? 1 : 0;
+        used[j] = true; result.push([order[i], order[j]]); sameUsed += sm;
         if (feasible() && rec()) return true;
-        result.pop(); used[j] = false;
+        result.pop(); used[j] = false; sameUsed -= sm;
       }
       used[i] = false;
       return false;
@@ -650,11 +687,13 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   // Fallback search when the peer-first search runs out of time: always extend the most
   // constrained player (fewest allowed opponents), trying the nearest-ranked first. Finds a
   // valid pairing in hard late rounds where peer-first order wanders. Returns pairs or null.
-  function constrained(order, met, maxRepeat) {
-    var n = order.length, used = [], result = [], budget = 20000;
+  function constrained(order, met, maxRepeat, same, maxSame) {
+    var n = order.length, used = [], result = [], budget = 20000, sameUsed = 0;
     function options(a) {
       var c = [];
-      for (var b = 0; b < n; b++) if (b !== a && !used[b] && met(order[a], order[b]) <= maxRepeat) c.push(b);
+      for (var b = 0; b < n; b++) {
+        if (b !== a && !used[b] && met(order[a], order[b]) <= maxRepeat && (sameUsed < maxSame || !same(order[a], order[b]))) c.push(b);
+      }
       return c;
     }
     function rec() {
@@ -670,10 +709,10 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       used[best] = true;
       for (var k = 0; k < bestC.length; k++) {
         if (--budget < 0) break;
-        var b = bestC[k];
-        used[b] = true; result.push(best < b ? [order[best], order[b]] : [order[b], order[best]]);
+        var b = bestC[k], sm = same(order[best], order[b]) ? 1 : 0;
+        used[b] = true; result.push(best < b ? [order[best], order[b]] : [order[b], order[best]]); sameUsed += sm;
         if (rec()) return true;
-        result.pop(); used[b] = false;
+        result.pop(); used[b] = false; sameUsed -= sm;
       }
       used[best] = false;
       return false;
@@ -682,12 +721,78 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     return result.sort(function (x, y) { return order.indexOf(x[0]) - order.indexOf(y[0]); });
   }
 
-  function australian(order, met) {
+  // Fewest rematches first; within that, fewest pairs from the same school or club.
+  function australian(order, met, same) {
+    same = same || function () { return false; };
+    var tries = sameSchoolTries(order, same);
     for (var rep = 0; rep <= order.length; rep++) {
-      var res = swiss(order, met, rep) || constrained(order, met, rep);
-      if (res) return res;
+      for (var k = 0; k < tries.length; k++) {
+        var res = swiss(order, met, rep, same, tries[k]) || constrained(order, met, rep, same, tries[k]);
+        if (res) return res;
+      }
     }
     return consecutive(order);
+  }
+
+  // How many same-school pairs to allow, in order: from the fewest possible (a school with more than
+  // half the field must play itself), a few more, then any number. With no schools: just "any".
+  function sameSchoolTries(order, same) {
+    var n = order.length, biggest = 0, any = false;
+    for (var a = 0; a < n; a++) {
+      var c = 1;
+      for (var b = 0; b < n; b++) if (b !== a && same(order[a], order[b])) { c++; any = true; }
+      if (c > biggest) biggest = c;
+    }
+    if (!any) return [Infinity];
+    var least = Math.max(0, Math.ceil((2 * biggest - n) / 2));
+    return [least, least + 1, least + 2, least + 3, Infinity];
+  }
+
+  function schoolKey(pl) { return String(pl.school || '').replace(/\s+/g, ' ').trim().toUpperCase(); }
+  // same(a, b) for a division, or null unless the division's "avoid same school" option is ticked
+  // and some players have a school.
+  PM.sameSchool = function (sec) {
+    if (sec.avoidSameSchool !== true) return null;
+    var keys = sec.players.map(schoolKey);
+    if (!keys.some(function (k) { return k; })) return null;
+    return function (a, b) { return !!keys[a] && keys[a] === keys[b]; };
+  };
+  PM.schoolOf = function (sec, p) { return schoolKey(sec.players[p]); };
+
+  // Random first-round styles: draw a few times and keep the one with the fewest same-school pairs.
+  function fewestSame(make, same) {
+    var best = make();
+    if (!same) return best;
+    var count = function (pairs) { return pairs.filter(function (x) { return same(x[0], x[1]); }).length; };
+    var bestN = count(best);
+    for (var i = 0; i < 300 && bestN > 0; i++) {
+      var p = make(), c = count(p);
+      if (c < bestN) { best = p; bestN = c; }
+    }
+    return bestN > 0 ? separate(best, same) : best;
+  }
+
+  // When the style itself can't keep schoolmates apart, bend it: swap the lower-placed players of two games,
+  // using the nearest game that lowers the count, so everyone still meets someone from the other half.
+  function separate(pairs, same) {
+    pairs = pairs.map(function (x) { return x.slice(); });
+    var bad = function (x, y) { return same(x, y) ? 1 : 0; };
+    for (var guard = 0; guard < pairs.length * 4; guard++) {
+      var move = null;
+      for (var i = 0; i < pairs.length && !move; i++) {
+        if (!bad(pairs[i][0], pairs[i][1])) continue;
+        for (var d = 1; d < pairs.length && !move; d++) {
+          [i - d, i + d].forEach(function (j) {
+            if (move || j < 0 || j >= pairs.length) return;
+            var a = pairs[i], b = pairs[j];
+            if (bad(a[0], b[1]) + bad(b[0], a[1]) < bad(a[0], a[1]) + bad(b[0], b[1])) move = [i, j];
+          });
+        }
+      }
+      if (!move) break;
+      var t = pairs[move[0]][1]; pairs[move[0]][1] = pairs[move[1]][1]; pairs[move[1]][1] = t;
+    }
+    return pairs;
   }
 
   function byeCount(sec, p, beforeRound) {
@@ -769,13 +874,13 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       order.splice(byeIdx, 1);
     }
 
-    var pairs;
+    var pairs, same = PM.sameSchool(sec);
     if (method === 'halves') pairs = halves(active.filter(function (p) { return order.indexOf(p) >= 0; }), round - 1);
-    else if (method === 'quarters12') pairs = quarters12(order, rng);
-    else if (method === 'chance') pairs = consecutive(shuffle(order, rng));
-    else if (!useRanks) pairs = firstRoundPairs(opts.firstRound || 'q13', order, rng, round - 1);
+    else if (method === 'quarters12') pairs = fewestSame(function () { return quarters12(order, rng); }, same);
+    else if (method === 'chance') pairs = fewestSame(function () { return consecutive(shuffle(order, rng)); }, same);
+    else if (!useRanks) pairs = fewestSame(function () { return firstRoundPairs(opts.firstRound || 'q13', order, rng, round - 1); }, same);
     else if (method === 'koth') pairs = consecutive(order);
-    else pairs = australian(order, meetings(sec, fresh, round - 1));
+    else pairs = australian(order, meetings(sec, fresh, round - 1), same);
 
     place(sec, round, gibPairs.concat(pairs));
     return round;
@@ -1040,12 +1145,115 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   };
 })(PM);
 
+// PairMaster — undo. Every autosave records the tournament as it was before the change, so any
+// change (a score, a designated result, a redraw, a cleared round, even opening a file) can be undone.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+  // Bookkeeping that is not part of the tournament: never undone, and a change to it alone is not a step.
+  var KEEP = { lastSavedName: true, lastBackupRounds: true };
+  function snapshot(t) {
+    return JSON.stringify(t, function (k, v) { return KEEP[k] ? undefined : v; });
+  }
+
+  PM.makeUndo = function (limit) {
+    limit = limit || 60;
+    var steps = [], current = null;
+    return {
+      // Call after every change, with the tournament as it is now.
+      record: function (t) {
+        var now = snapshot(t);
+        if (current !== null && now !== current) {
+          steps.push(current);
+          if (steps.length > limit) steps.shift();
+        }
+        current = now;
+      },
+      canUndo: function () { return steps.length > 0; },
+      // Returns the tournament as it was before the last change (bookkeeping taken from t), or null.
+      undo: function (t) {
+        if (!steps.length) return null;
+        current = steps.pop();
+        var back = JSON.parse(current);
+        Object.keys(KEEP).forEach(function (k) { if (t && t[k] !== undefined) back[k] = t[k]; });
+        return back;
+      },
+      // Forget everything (e.g. when the tournament is loaded at start-up).
+      reset: function (t) { steps = []; current = t ? snapshot(t) : null; }
+    };
+  };
+})(PM);
+
+// PairMaster — prize list for a division: top places and the usual special prizes, worked out from the results.
+// Only played games count for the special prizes (byes and designated results never do). Ties are all listed.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+
+  // places: how many top places to list. upTo: last round counted (default: last finished round).
+  PM.prizeList = function (t, sec, places, upTo) {
+    if (upTo === undefined || upTo === null) upTo = PM.roundsComplete(sec);
+    places = Math.max(1, places || 3);
+    var key = t.rankMethod === 'A' ? 'total' : 'spread';
+    var rows = PM.standings(t, sec, upTo);
+    var out = {
+      round: upTo, key: key,
+      places: [],
+      highWin: { margin: 0, games: [] },   // biggest winning margin
+      highLoss: { score: 0, games: [] },   // highest score in a lost game
+      highGame: { score: 0, games: [] },   // highest score in any game
+      bestSpread: { spread: null, players: [] },
+      highWord: sec.highWord && sec.highWord.score ? { text: sec.highWord.text, score: sec.highWord.score } : null
+    };
+    // Top places; a player tied with the one above on wins and spread/total shares the place.
+    rows.slice(0, places).forEach(function (r, i) {
+      var prev = out.places[i - 1];
+      var shared = prev && prev.wins === r.wins && prev.value === r[key];
+      out.places.push({ place: shared ? prev.place : i + 1, idx: r.idx, wins: r.wins, value: r[key], tied: !!shared });
+      if (shared) prev.tied = true;
+    });
+    // ...and anyone below the cut who is tied with the last place listed.
+    var last = out.places[out.places.length - 1];
+    rows.slice(places).forEach(function (r) {
+      if (last && r.wins === last.wins && r[key] === last.value) {
+        out.places.push({ place: last.place, idx: r.idx, wins: r.wins, value: r[key], tied: true });
+        last.tied = true;
+      }
+    });
+
+    function better(rec, field, value, item) {
+      if (value > rec[field]) { rec[field] = value; rec.games = [item]; }
+      else if (value === rec[field] && value > 0) rec.games.push(item);
+    }
+    for (var r = 1; r <= upTo; r++) {
+      sec.players.forEach(function (pl, p) {
+        var g = PM.game(sec, p, r);
+        if (!g || g.opp === p || !PM.isPlayed(sec, p, r)) return;
+        var os = PM.game(sec, g.opp, r).score;
+        better(out.highGame, 'score', g.score, { round: r, idx: p, opp: g.opp, score: g.score, oppScore: os });
+        if (g.score > os) better(out.highWin, 'margin', g.score - os, { round: r, idx: p, opp: g.opp, score: g.score, oppScore: os });
+        if (g.score < os) better(out.highLoss, 'score', g.score, { round: r, idx: p, opp: g.opp, score: g.score, oppScore: os });
+      });
+    }
+    rows.forEach(function (row) {
+      if (!row.games) return;
+      if (out.bestSpread.spread === null || row.spread > out.bestSpread.spread) out.bestSpread = { spread: row.spread, players: [row.idx] };
+      else if (row.spread === out.bestSpread.spread) out.bestSpread.players.push(row.idx);
+    });
+    return out;
+  };
+})(PM);
+
 // PairMaster — user interface, printing and autosave.
 (function (PM) {
   'use strict';
   var STORE_KEY = 'pairmaster.current';
+  var ONLINE_GUIDE = 'https://azlanomar89.github.io/pairmaster/guide.html';
   var $ = function (id) { return document.getElementById(id); };
   var st = { t: null, sec: 0, round: 1, tab: 'players', printWhat: 'pairings', printSecs: 'all', standRound: null, printRound: null, printWithStandings: true };
+  var undoLog = PM.makeUndo(60);
   var draft = { method: 'australian', firstRound: 'q13', freshStart: 1, gibUntick: {} };
 
   function esc(s) {
@@ -1066,6 +1274,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
 
   // ---------- persistence ----------
   function save() {
+    undoLog.record(st.t);
+    renderUndo();
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({ t: st.t, sec: st.sec, round: st.round, tab: st.tab }));
       $('saved-label').textContent = 'Autosaved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1080,6 +1290,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       var d = JSON.parse(raw);
       if (!d || !PM.validTournament(d.t)) throw new Error('damaged');
       st.t = d.t; st.sec = d.sec || 0; st.round = d.round || 1; st.tab = d.tab || 'players';
+      undoLog.reset(st.t);
       return true;
     } catch (e) {
       try { localStorage.setItem(STORE_KEY + '.damaged', localStorage.getItem(STORE_KEY)); } catch (e2) { /* ignore */ }
@@ -1089,6 +1300,18 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     }
   }
   function changed() { save(); render(); }
+  function renderUndo() {
+    var b = $('btn-undo');
+    if (b) b.disabled = !undoLog.canUndo();
+  }
+  function undo() {
+    var back = undoLog.undo(st.t);
+    if (!back) return;
+    st.t = back;
+    if (st.sec >= st.t.sections.length) st.sec = 0;
+    changed();
+    flash('Undone ✓ (click Undo again to go further back)');
+  }
 
   function freshTournament() {
     st.t = PM.newTournament(todayDMY(), 'New tournament', 'M');
@@ -1183,6 +1406,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
           warn.slice(0, 8).join('\n• ') + (warn.length > 8 ? '\n• …and ' + (warn.length - 8) + ' more' : '') : ''))) return;
       t.lastBackupRounds = t.sections.reduce(function (n, s) { return n + PM.roundsComplete(s); }, 0);
       t.lastSavedName = fname.toUpperCase().replace(/\.TOU$/, '').slice(0, 8);
+      PM.carrySchools(st.t, t);
       st.t = t; st.sec = 0; st.round = defaultRound(t.sections[0]); st.tab = 'round'; changed();
     } catch (e) { alert('Could not open ' + fname + ': ' + e.message); }
   }
@@ -1249,6 +1473,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   function renderPlayers(main) {
     var s = sec(), started = PM.hasGames(s);
     var otherSecs = st.t.sections.map(function (x, i) { return i; }).filter(function (i) { return i !== st.sec; });
+    var schools = s.avoidSameSchool === true;
+    var noSchool = schools ? s.players.filter(function (pl) { return !String(pl.school || '').trim(); }).length : 0;
     var h = '<div class="card"><h2>Tournament</h2><div class="row">' +
       '<label>Date</label><input type="date" id="t-date" value="' + dmyToIso(st.t.date) + '">' +
       '<label>Title</label><input id="t-title" size="34" value="' + esc(st.t.title) + '">' +
@@ -1259,13 +1485,17 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       '<div class="row"><label>Division name</label><input id="s-name" size="16" value="' + esc(s.name) + '">' +
       '<button id="s-sort" class="small">Sort A–Z</button>' +
       (st.t.sections.length > 1 && !started ? '<button id="s-del" class="small danger">Delete division</button>' : '') + '</div>' +
+      '<div class="row"><label><input type="checkbox" id="s-school"' + (schools ? ' checked' : '') + '> Avoid pairing players from the same school or club</label></div>' +
+      (schools ? '<p class="hint">Type each player\'s school or club. The draw keeps schoolmates apart where it can (rematches are still avoided first).' +
+        (noSchool ? ' <b>' + noSchool + ' player' + (noSchool === 1 ? ' has' : 's have') + ' no school yet</b> and can be paired with anyone.' : '') + '</p>' : '') +
       '<p class="hint">' + (started
         ? 'The draw has started. Players who leave should be marked <b>Missing</b> – they get a designated loss each round and are left out of the draw.'
         : 'Enter players in rating order, highest first, before the first draw. Add <b>@12</b> to a name to fix that player to table 12, or <b>@R</b> for a fixed table near the front.') + '</p>';
-    h += '<table><thead><tr><th class="num">#</th><th>Name</th><th>Missing</th><th></th></tr></thead><tbody>';
+    h += '<table><thead><tr><th class="num">#</th><th>Name</th>' + (schools ? '<th>School / club</th>' : '') + '<th>Missing</th><th></th></tr></thead><tbody>';
     s.players.forEach(function (pl, p) {
       h += '<tr class="' + (pl.missing ? 'missing' : '') + '"><td class="num">' + (p + 1) + '</td>' +
         '<td><input class="name-input" data-name="' + p + '" maxlength="20" value="' + esc(pl.name) + '"></td>' +
+        (schools ? '<td><input class="school-input" data-school="' + p + '" maxlength="30" size="14" value="' + esc(pl.school || '') + '"></td>' : '') +
         '<td><input type="checkbox" data-miss="' + p + '"' + (pl.missing ? ' checked' : '') + ' title="Dropped out / absent"></td>' +
         '<td class="actions"><button class="small" data-up="' + p + '"' + (p === 0 ? ' disabled' : '') + '>↑</button> ' +
         '<button class="small" data-down="' + p + '"' + (p === s.players.length - 1 ? ' disabled' : '') + '>↓</button> ' +
@@ -1274,8 +1504,11 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         (!started ? '<button class="small danger" data-del="' + p + '">Remove</button>' : '') + '</td></tr>';
     });
     h += '</tbody></table><div class="row" style="margin-top:10px"><input id="p-new" size="28" maxlength="20" placeholder="First name Surname, then Enter">' +
+      (schools ? '<input id="p-new-school" size="16" maxlength="30" placeholder="School / club">' : '') +
       '<button id="p-add" class="primary">Add player</button></div>' +
-      '<details><summary class="hint">Paste a list of players (one per line)</summary><textarea id="p-bulk" rows="6" cols="40"></textarea><br><button id="p-bulk-add" class="small">Add all</button></details></div>';
+      '<details><summary class="hint">Paste a list of players (one per line)</summary>' +
+      (schools ? '<p class="hint">One player per line, with the school or club after a comma or a tab: <i>Ann Lee, Hillview School</i>. Names in one spreadsheet column and schools in the next can be copied and pasted straight in.</p>' : '') +
+      '<textarea id="p-bulk" rows="6" cols="40"></textarea><br><button id="p-bulk-add" class="small">Add all</button></details></div>';
     main.innerHTML = h;
 
     $('t-date').onchange = function () { st.t.date = isoToDmy(this.value) || st.t.date; changed(); };
@@ -1291,13 +1524,31 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (!confirm('Delete division ' + s.name + ' and its players?')) return;
       st.t.sections.splice(st.sec, 1); st.sec = 0; changed();
     };
-    function addName(n) {
+    function addName(n, school) {
       n = n.replace(/\s+/g, ' ').trim();
-      if (n) PM.addPlayer(s, n.slice(0, 20));
+      school = String(school || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+      if (!n) return;
+      var pl = PM.addPlayer(s, n.slice(0, 20));
+      if (school) pl.school = school;
     }
-    $('p-add').onclick = function () { addName($('p-new').value); changed(); $('p-new').focus(); };
+    $('s-school').onchange = function () { if (this.checked) s.avoidSameSchool = true; else delete s.avoidSameSchool; changed(); };
+    $('p-add').onclick = function () { addName($('p-new').value, schools ? $('p-new-school').value : ''); changed(); $('p-new').focus(); };
     $('p-new').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
-    $('p-bulk-add').onclick = function () { $('p-bulk').value.split(/\n/).forEach(addName); changed(); };
+    if (schools) $('p-new-school').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
+    $('p-bulk-add').onclick = function () {
+      $('p-bulk').value.split(/\n/).forEach(function (line) {
+        var cut = schools ? line.search(/[\t,]/) : -1;
+        if (cut < 0) addName(line); else addName(line.slice(0, cut), line.slice(cut + 1).replace(/[\t,]+/g, ' '));
+      });
+      changed();
+    };
+    main.querySelectorAll('[data-school]').forEach(function (inp) {
+      inp.onchange = function () {
+        var v = this.value.replace(/\s+/g, ' ').trim().slice(0, 30), pl = s.players[+this.dataset.school];
+        if (v) pl.school = v; else delete pl.school;
+        changed();
+      };
+    });
     main.querySelectorAll('[data-name]').forEach(function (inp) {
       inp.onchange = function () { var v = this.value.replace(/\s+/g, ' ').trim(); if (v) s.players[+this.dataset.name].name = v.slice(0, 20); changed(); };
     });
@@ -1407,6 +1658,9 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       (!hasRes ? '<div class="row"><label>First round</label><select id="d-first">' + firstOpts + '</select></div>' : '') +
       (draft.method === 'australian' || draft.method === 'lagged'
         ? '<div class="row"><label>Fresh start with game</label><input id="d-fresh" type="number" min="1" style="width:70px" value="' + draft.freshStart + '"><span class="hint">Leave at 1 unless you want to allow rematches against opponents from before that game.</span></div>' : '') +
+      (s.avoidSameSchool === true
+        ? '<p class="hint">' + (draft.method === 'roundrobin' || draft.method === 'koth' || draft.method === 'halves'
+          ? 'This method ignores schools.' : 'Schoolmates are kept apart where possible (set on the Players tab).') + '</p>' : '') +
       gibsonBlock(s, nextR) +
       (missing.length ? '<p class="pill warn">Marked missing (designated loss): ' + missing.join(', ') + '</p>' : '') +
       '<div class="row"><button id="d-go" class="' + (nextR <= drawn ? '' : 'primary') + '">' +
@@ -1454,7 +1708,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         '<td><span class="starter">' + (ga.first ? '*' : '') + '</span>' + nm(s, row.a) + '</td>' +
         '<td class="num"><input class="score" inputmode="numeric" data-score="' + row.a + '" value="' + (ga.score || '') + '"></td>' +
         '<td class="num"><input class="score" inputmode="numeric" data-score="' + row.b + '" value="' + (gb.score || '') + '"></td>' +
-        '<td><span class="starter">' + (gb.first ? '*' : '') + '</span>' + nm(s, row.b) + '</td>' +
+        '<td><span class="starter">' + (gb.first ? '*' : '') + '</span>' + nm(s, row.b) +
+        (s.avoidSameSchool === true && PM.schoolOf(s, row.a) && PM.schoolOf(s, row.a) === PM.schoolOf(s, row.b) ? ' <span class="pill warn" title="Both players are from ' + esc(s.players[row.a].school) + '">same school</span>' : '') + '</td>' +
         '<td class="result" id="res-' + row.a + '">' + resultText(s, row.a, r) + '</td>' +
         '<td class="actions"><button class="small" data-toggle="' + row.a + '" title="Change who starts">⇄</button> ' +
         '<select class="small" data-repair="' + row.a + '">' + playerOpts(row.a) + '</select> ' +
@@ -1653,7 +1908,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     return h + '</tbody></table><p>Numbers are opponents\' numbers. * = plays first.</p>';
   }
   function standingsPrint(s, upTo) {
-    return '<h1>' + esc(s.name) + ' – Standings after round ' + upTo + '</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</h2>' +
+    return '<h1>' + esc(s.name) + ' – Standings after round ' + upTo + (upTo > PM.roundsComplete(s) ? ' (round not finished)' : '') + '</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</h2>' +
       standingsTable(s, upTo) + highLines(s);
   }
   function resultsPrint(s, si, r) {
@@ -1683,6 +1938,35 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     if (st.printWithStandings) {
       h += '<h2 style="margin-top:16px">Standings after round ' + r + (PM.isRoundComplete(s, r) ? '' : ' (round not finished)') + '</h2>' + standingsTable(s, r);
     }
+    return h;
+  }
+  function prizesPrint(s) {
+    var pz = PM.prizeList(st.t, s, s.prizes || 3), drawn = PM.roundsDrawn(s);
+    var h = '<h1>' + esc(s.name) + ' – Prize list</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + (pz.round ? ' · after round ' + pz.round +
+      (pz.round < drawn ? ' (round ' + (pz.round + 1) + ' is not finished, so it is not counted)' : '') : '') + '</h2>';
+    if (!pz.round) return h + '<p>No round has finished yet.</p>';
+    var val = function (v) { return pz.key === 'total' ? v + ' total' : fmtSigned(v); };
+    h += '<table><thead><tr><th>Prize</th><th>Winner</th><th>Details</th></tr></thead><tbody>';
+    pz.places.forEach(function (x) {
+      h += '<tr><td>' + ordinal(x.place) + ' place' + (x.tied ? ' (tied)' : '') + '</td><td><b>' + nm(s, x.idx) + '</b></td><td>' +
+        fmtWins(x.wins) + ' wins, ' + val(x.value) + '</td></tr>';
+    });
+    function game(label, rec, what) {
+      if (!rec.games.length) { h += '<tr><td>' + label + '</td><td colspan="2" class="hint">none</td></tr>'; return; }
+      rec.games.forEach(function (g, i) {
+        h += '<tr><td>' + (i ? '' : label) + '</td><td><b>' + nm(s, g.idx) + '</b></td><td>' + what(g) + ' – ' + g.score + '–' + g.oppScore +
+          ' v ' + nm(s, g.opp) + ', round ' + g.round + '</td></tr>';
+      });
+    }
+    game('Highest win', pz.highWin, function (g) { return 'won by ' + (g.score - g.oppScore); });
+    game('Highest losing score', pz.highLoss, function (g) { return 'lost with ' + g.score; });
+    game('High game', pz.highGame, function (g) { return g.score; });
+    pz.bestSpread.players.forEach(function (p, i) {
+      h += '<tr><td>' + (i ? '' : 'Best spread') + '</td><td><b>' + nm(s, p) + '</b></td><td>' + fmtSigned(pz.bestSpread.spread) + '</td></tr>';
+    });
+    if (pz.highWord) h += '<tr><td>High word</td><td colspan="2"><b>' + esc(pz.highWord.text) + '</b> ' + pz.highWord.score + '</td></tr>';
+    h += '</tbody></table><p class="hint">Ties are all listed. Byes and designated results are not counted for the game prizes. ' +
+      'Check the list before announcing it: one player may be due more than one prize.</p>';
     return h;
   }
   var RESULT_TEXT = { W: 'Won', L: 'Lost', T: 'Tie', bye: 'Bye', dL: 'Desig. loss', dD: 'Desig. draw', pending: '', '': '' };
@@ -1730,35 +2014,37 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     });
     return h + '</tbody></table>';
   }
-  function defaultPrintRound() {
-    var s = sec(), c = PM.roundsComplete(s);
-    return c || PM.roundsDrawn(s) || 1;
-  }
   function buildPrint() {
     var secs = st.printSecs === 'all' ? st.t.sections.map(function (x, i) { return i; }) : [st.sec];
     return secs.map(function (si, n) {
       var s = st.t.sections[si], out;
+      var drawn = PM.roundsDrawn(s), complete = PM.roundsComplete(s), r = st.printRound;
+      var notYet = '<h1>' + esc(s.name) + '</h1><p>' + (drawn ? 'Round ' + r + ' has not been drawn in this division yet (it is on round ' + drawn + ').' : 'No draw yet.') + '</p>';
       if (st.printWhat === 'pairings') {
-        var r = PM.roundsDrawn(s);
-        out = r ? pairingsPrint(s, si, Math.max(1, Math.min(r, PM.roundsComplete(s) + 1))) : '<h1>' + esc(s.name) + '</h1><p>No draw yet.</p>';
+        if (!r) r = Math.max(1, Math.min(drawn, complete + 1));
+        out = drawn && r <= drawn ? pairingsPrint(s, si, r) : notYet;
       } else if (st.printWhat === 'schedule') out = schedulePrint(s);
-      else if (st.printWhat === 'results') out = resultsPrint(s, si, st.printRound || defaultPrintRound());
+      else if (st.printWhat === 'results') out = resultsPrint(s, si, r || complete || drawn || 1);
       else if (st.printWhat === 'scorecards') out = scorecardsPrint(s, si);
       else if (st.printWhat === 'wallchart') out = wallChartPrint(s);
-      else out = standingsPrint(s, PM.roundsComplete(s));
+      else if (st.printWhat === 'prizes') out = prizesPrint(s);
+      else out = r && r > drawn ? notYet : standingsPrint(s, r || complete);
       return (n ? '<div class="page-break"></div>' : '') + out;
     }).join('');
   }
   function renderPrint(main) {
-    var what = [['pairings', 'Pairings for the current round'], ['results', 'Results for a round'], ['standings', 'Standings'],
+    var what = [['pairings', 'Pairings'], ['results', 'Results for a round'], ['standings', 'Standings'], ['prizes', 'Prize list'],
       ['scorecards', 'Scorecards (one per player)'], ['wallchart', 'Wall chart'], ['schedule', 'Full schedule (round robin)']];
     var maxR = st.t.sections.reduce(function (m, x) { return Math.max(m, PM.roundsDrawn(x)); }, 0);
-    var pr = Math.min(st.printRound || defaultPrintRound(), Math.max(1, maxR));
-    var roundPick = '';
-    if (st.printWhat === 'results') {
-      for (var i = 1; i <= Math.max(1, maxR); i++) roundPick += '<option value="' + i + '"' + (i === pr ? ' selected' : '') + '>Round ' + i + '</option>';
-      roundPick = '<select id="pr-round">' + roundPick + '</select><label><input type="checkbox" id="pr-stand"' + (st.printWithStandings ? ' checked' : '') + '> include standings after that round</label>';
+    if (st.printRound > maxR) st.printRound = null;
+    var roundPick = '', latest = { pairings: 'Current round', results: 'Latest finished round', standings: 'Latest (after the last finished round)' }[st.printWhat];
+    if (latest) {
+      roundPick = '<option value="">' + latest + '</option>';
+      for (var i = 1; i <= maxR; i++) roundPick += '<option value="' + i + '"' + (i === st.printRound ? ' selected' : '') + '>' + (st.printWhat === 'standings' ? 'After round ' : 'Round ') + i + '</option>';
+      roundPick = '<select id="pr-round">' + roundPick + '</select>';
+      if (st.printWhat === 'results') roundPick += '<label><input type="checkbox" id="pr-stand"' + (st.printWithStandings ? ' checked' : '') + '> include standings after that round</label>';
     }
+    if (st.printWhat === 'prizes') roundPick = '<label>Places with prizes in Division ' + esc(sec().name) + '</label><input id="pr-places" type="number" min="1" max="50" style="width:60px" value="' + (sec().prizes || 3) + '">';
     main.innerHTML = '<div class="card"><h2>Print</h2><div class="row"><select id="pr-what">' +
       what.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === st.printWhat ? ' selected' : '') + '>' + w[1] + '</option>'; }).join('') +
       '</select><select id="pr-secs"><option value="all"' + (st.printSecs === 'all' ? ' selected' : '') + '>All divisions (one per page)</option><option value="one"' +
@@ -1769,7 +2055,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       '<div class="preview" id="pr-preview">' + buildPrint() + '</div>';
     $('pr-what').onchange = function () { st.printWhat = this.value; render(); };
     $('pr-secs').onchange = function () { st.printSecs = this.value; render(); };
-    if ($('pr-round')) $('pr-round').onchange = function () { st.printRound = +this.value; render(); };
+    if ($('pr-round')) $('pr-round').onchange = function () { st.printRound = +this.value || null; render(); };
+    if ($('pr-places')) $('pr-places').onchange = function () { sec().prizes = Math.max(1, Math.min(50, parseInt(this.value, 10) || 3)); changed(); };
     if ($('pr-stand')) $('pr-stand').onchange = function () { st.printWithStandings = this.checked; render(); };
     $('pr-go').onclick = function () {
       $('print-area').innerHTML = buildPrint();
@@ -1790,7 +2077,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     try { render(); } catch (e) {
       try { localStorage.setItem(STORE_KEY + '.damaged', localStorage.getItem(STORE_KEY)); } catch (e2) { /* ignore */ }
       alert('The autosaved tournament could not be shown, so a new one has been started. The damaged copy was kept. Open your latest .TOU file to carry on.');
-      freshTournament(); save();
+      freshTournament(); undoLog.reset(st.t); save();
     }
     Array.prototype.forEach.call($('tabs').children, function (b) {
       b.onclick = function () { st.tab = b.dataset.tab; if (st.tab === 'round') st.round = defaultRound(sec()); changed(); };
@@ -1800,6 +2087,17 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       freshTournament(); changed();
     };
     $('btn-save').onclick = saveTou;
+    $('btn-undo').onclick = undo;
+    document.addEventListener('keydown', function (e) {
+      // Ctrl+Z / Cmd+Z undoes a PairMaster change, except while typing in a box (where it undoes the typing).
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'z' || e.key === 'Z') &&
+          !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); undo(); }
+    });
+    // PairMaster.html is often shared on its own, without guide.html beside it. Opened from a file and online,
+    // Help goes to the online guide; offline it opens the guide.html that came in the download.
+    $('btn-help').onclick = function () {
+      this.href = location.protocol === 'file:' && navigator.onLine ? ONLINE_GUIDE : 'guide.html';
+    };
     $('btn-open').onclick = openTou;
     $('btn-folder').onclick = chooseFolder;
     if (canFolder) idb('get').then(function (h) { folder = h; renderFolder(); });
