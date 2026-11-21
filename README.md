@@ -28,9 +28,14 @@ and included in the download as `guide.html`).
 - **Gibsonization** for clinched prize places.
 - **Same-school avoidance** (optional): tick it, give players a school or club, and the draw keeps schoolmates apart where it can.
 - **Undo** for any change: a score, a designated result, a redraw, a cleared round.
+- **Practice mode** for new directors: a made-up event with random scores, kept apart from the real one.
+- **Event file** (`.pairmaster`) saved with every `.TOU`, keeping schools, classes and settings; automatic backup after each round.
+- **Forfeits** as in WESPA Rule 2.3.6 (win by 100, unrated), a spread cap and a bye-spread setting.
+- **Fast score entry:** jump to a game by table number or name, a typo guard, and a list of who is missing.
 - **Several divisions**, with table numbers running on from one division to the next.
 - **Standings** by wins then spread (or total score), at any earlier round.
-- **Printouts:** pairings, results and standings for any round, prize list, player scorecards, wall chart, round-robin schedule.
+- **Printouts:** pairings, result slips, results and standings for any round, prize list (with class, tuff luck, lucky stiff, average and day prizes), player scorecards, wall chart, round-robin schedule.
+- **Projector view:** large standings for the hall screen that update as scores are entered.
 - **AuPair `.TOU` files:** open and save, byte-for-byte compatible with AuPair 6.16.
 - **Safe by design:** autosaves in your browser, reminds you to save a `.TOU` backup after each
   round, checks damaged files before opening them, and makes no internet connections (only the Help button opens the online guide, in a new tab).
@@ -43,6 +48,10 @@ up to 500 players and 60-player, 59-round events.
 
 ## Versions
 
+- **1.2**: practice mode for new directors; `.pairmaster` event file and automatic backup after each round;
+  forfeits (WESPA Rule 2.3.6) with spread cap and bye-spread settings; jump to a game, typo guard and who-is-missing list;
+  class prizes, tuff luck, lucky stiff, highest average and day prizes; result slips; projector view; 1st–2nd counts in
+  standings; schools kept apart only in chosen rounds; forfeit codes from other software read and kept correctly.
 - **1.1**: optionally avoid pairing players from the same school or club; Undo; prize list printout; print pairings and
   standings for any earlier round; a plain warning when AuPair has garbled a player who needed an opponent;
   Help opens the online guide when `guide.html` isn't next to `PairMaster.html`.

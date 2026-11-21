@@ -56,13 +56,15 @@ th { color: var(--muted); font-weight: 600; }
   <li>Use a laptop or desktop. Phones and tablets are not supported.</li>
 </ul>
 <p>The screen has four tabs: <b>Players</b>, <b>Rounds &amp; scores</b>, <b>Standings</b> and <b>Print</b>. Divisions appear as buttons under the tabs; click one to switch.</p>
+<div class="note"><b>New to directing? Click Practice</b> (top right). It opens a made-up event with two divisions where you can draw rounds, click <b>Fill in random scores</b> to play a round in a second, and try designated results, forfeits, Undo, printing and the prize list. Saving and opening files are turned off in practice, and your real tournament comes back untouched when you click <b>Leave practice</b>.</div>
 
 <h2 id="saving">2. Saving your work</h2>
 <p>PairMaster saves everything automatically inside your browser as you type. That copy belongs to that browser on that computer only, and is lost if the browser's data is cleared.</p>
-<div class="note"><b>Save a <code>.TOU</code> file after every round.</b> A yellow reminder bar appears when a round has finished since your last save. The <code>.TOU</code> file is your real backup: you can open it on any computer, in PairMaster or in AuPair.</div>
+<div class="note"><b>Save after every round.</b> <b>Save</b> writes two files: the <code>.TOU</code> file for AuPair and the ratings officer, and a <code>.pairmaster</code> event file that also keeps everything a <code>.TOU</code> can't hold (schools, classes, prize settings, total rounds, Gibsonization, forfeits and scoring rules). To carry on on another computer, open the <code>.pairmaster</code> file.</div>
 <ul>
-  <li><b>Save .TOU</b>: the first time, Chrome/Edge ask you to pick a folder (for example Documents → PairMaster). After that, files go there. The folder button next to it shows or changes the folder.</li>
-  <li><b>Open .TOU</b>: opens a <code>.TOU</code> file saved by PairMaster or by AuPair. The tournament on screen is replaced, so save it first if you need it.</li>
+  <li><b>Save</b>: the first time, Chrome/Edge ask you to pick a folder (for example Documents → PairMaster). After that, files go there. The folder button next to it shows or changes the folder.</li>
+  <li><b>Automatic backup</b> (Chrome/Edge, once you have saved into a folder): when a round finishes, PairMaster saves both files again by itself and keeps a numbered copy such as <code>KLOPEN26-R05.TOU</code> in a <b>PairMaster backups</b> folder inside it. If the browser asks for permission again (for example after a restart), the yellow reminder bar appears instead until you click Save once. In Safari and Firefox files go to Downloads, so the reminder bar is used there.</li>
+  <li><b>Open</b>: opens a <code>.pairmaster</code> event file, or a <code>.TOU</code> file saved by PairMaster or by AuPair. The tournament on screen is replaced (Undo brings it back).</li>
   <li><b>New</b>: starts an empty tournament.</li>
   <li><b>↶ Undo</b> (or Ctrl+Z / Cmd+Z when you are not typing in a box): takes back the last change, such as a wrong designated result, a redraw, a cleared round, a score or even opening a file. Click it again to go further back (up to 60 steps). Undo forgets its steps when you close or reload the page.</li>
 </ul>
@@ -72,6 +74,7 @@ th { color: var(--muted); font-weight: 600; }
 <p>On the <b>Players</b> tab, set the date, title and how ties are ranked (by <b>spread</b>, the usual choice, or by <b>total score</b>).</p>
 <ul>
   <li><b>Enter players in rating order, highest first.</b> The first-round draw and table order depend on it. Type a name and press Enter, or paste a whole list (one name per line).</li>
+  <li><b>Classes for prizes</b> (off unless you tick it): a <b>Class</b> column appears (for example Newcomer, Under 12). The prize list then shows the best player in each class. When pasting a list with both schools and classes, write <code>Name, School, Class</code>.</li>
   <li><b>Avoid pairing players from the same school or club</b> (off unless you tick it, for each division): a <b>School / club</b> column appears. Type each player's school next to their name. When pasting a list, put it after a comma or a tab (<code>Ann Lee, Hillview School</code>), or copy two columns from a spreadsheet. Capitals and extra spaces don't matter. See <a href="#draw">section 4</a>.</li>
   <li><b>↑ ↓</b> move a player; <b>Sort A–Z</b> sorts by name.</li>
   <li><b>+ Add division</b> creates another division (A, B, OPEN, SCHOOLS…). Before the first draw you can move a player to another division, remove players, or delete a division.</li>
@@ -94,7 +97,7 @@ th { color: var(--muted); font-weight: 600; }
   <tr><td>Chance</td><td>Random pairings.</td></tr>
 </table></div>
 <h3>Players from the same school or club</h3>
-<p>When <b>Avoid pairing players from the same school or club</b> is ticked on the Players tab, the Australian and Lagged draws avoid pairing players from the same one, and so do round 1 and the Quarters and Chance draws. If the quarters (or halves) of round 1 would put two schoolmates together, PairMaster swaps opponents with the nearest game that fixes it, so a player may meet someone from the next quarter instead; the top half still always plays the bottom half. Rematches are still avoided first: schoolmates only meet when the only alternative is a rematch, or when one school has more than half the players left to pair. Players with no school can be paired with anyone. Untick the box to stop (the schools you typed are kept, in case you tick it again). King of the Hill, Halves and Round robin ignore schools. A game between schoolmates is marked <b>same school</b> on the scores screen.</p>
+<p>When <b>Avoid pairing players from the same school or club</b> is ticked on the Players tab, the Australian and Lagged draws avoid pairing players from the same one, and so do round 1 and the Quarters and Chance draws. If the quarters (or halves) of round 1 would put two schoolmates together, PairMaster swaps opponents with the nearest game that fixes it, so a player may meet someone from the next quarter instead; the top half still always plays the bottom half. Rematches are still avoided first: schoolmates only meet when the only alternative is a rematch, or when one school has more than half the players left to pair. Players with no school can be paired with anyone. Untick the box to stop (the schools you typed are kept, in case you tick it again). To keep schoolmates apart only early on, fill in <b>Keep schoolmates apart in rounds 1 to 3</b> (for example) next to the tick box; from round 4 they may meet. King of the Hill, Halves and Round robin ignore schools. A game between schoolmates is marked <b>same school</b> on the scores screen.</p>
 <p>Schools are not part of the <code>.TOU</code> file, so AuPair and the ratings officer never see them. When you open a <code>.TOU</code>, PairMaster keeps the schools of players with the same name in the division on screen; on another computer, type them in again.</p>
 <p><b>Round 1</b> has its own options: quarters (1st v 3rd and 2nd v 4th, or 1st v 2nd and 3rd v 4th), halves, or chance, based on the order you entered players.</p>
 <ul>
@@ -105,6 +108,9 @@ th { color: var(--muted); font-weight: 600; }
 </ul>
 
 <h2 id="scores">5. Entering scores</h2>
+<p><b>Jump to a game:</b> type a table number or the start of either player's name in the box above the scores (press <b>/</b> to get there) and press Enter: the cursor goes to that game's first empty score. After the second score, it goes back to the box, ready for the next result slip.</p>
+<p><b>Typo guard:</b> a score under 100, or a game won by more than 350, makes PairMaster ask "Is 45 right?". Click Cancel to correct it.</p>
+<p><b>Who is missing?</b> Click the "3 scores to enter" button to list the games still to come, with their tables.</p>
 <p>Type each player's score and press Enter to move to the next box. The result (“Grace Lim wins by 45”) appears as you go, and the counter shows how many scores are still to enter. The <b>Find a player…</b> box finds a game quickly.</p>
 <p>A score under 10 counts as not entered yet. If a score is wrong, just type over it.</p>
 <p>Below the scores you can record the division's <b>high word</b> (the word and player, for example <code>QUIXOTIC Ann Lee</code>, and its score). The high game is found automatically.</p>
@@ -115,6 +121,10 @@ th { color: var(--muted); font-weight: 600; }
   <li>a designated win counts as a win by 1, a loss as a loss by 0, a draw as half a win with no spread;</li>
   <li>their opponent is <b>left without an opponent</b> and is marked “Needs an opponent”. Pair them with someone using <b>Pair with…</b>, or give them their own result with <b>Change…</b>. Nothing is decided for them automatically.</li>
 </ul>
+<h3>Forfeits (WESPA Rule 2.3.6)</h3>
+<p>If a player forfeits, for example for lateness, choose <b>X forfeits</b> in the game's <b>Nongame…</b> menu. Both players get their result at once: the opponent wins by 100 and the forfeiting player loses by 100. Neither is rated. The margin can be changed under <b>Players → Scoring rules</b>. In the <code>.TOU</code> file a forfeit is written as a designated win and loss, which every ratings officer accepts, so AuPair's own printout shows it as +1 and 0.</p>
+<h3>Scoring rules</h3>
+<p>Under <b>Players → Scoring rules</b> you can also set what a bye or designated win counts for (normally +1) and a <b>spread cap</b>: the most spread one game can add to the standings (used in Thailand). These affect PairMaster's standings and prizes only; the <code>.TOU</code> file keeps the real scores.</p>
 <p>Designated results count for placings, not for ratings, and are shown in brackets in the standings: for example <code>3 (+1)</code> means 3 wins from games plus 1 from a bye.</p>
 
 <h2 id="gibson">7. Gibsonization</h2>
@@ -126,15 +136,17 @@ th { color: var(--muted); font-weight: 600; }
 <p>PairMaster lists who has clinched (judged on wins). With an odd number of players a Gibsonized player takes the bye; otherwise they play the highest-ranked player out of the prizes. Untick anyone you don't want Gibsonized.</p>
 
 <h2 id="standings">8. Standings</h2>
-<p>Standings rank by wins, then spread (or total score, if you chose that). Use the picker to see the standings after any earlier round.</p>
+<p>Standings rank by wins, then spread (or total score, if you chose that). Use the picker to see the standings after any earlier round. The <b>1st–2nd</b> column shows how many games each player started and replied in; it is shown in bold when a player is two or more off an even split, so you can balance starts by hand with ⇄ if you wish.</p>
+<p><b>Projector view ↗</b> opens the standings in large type in a second window for the hall screen. Drag it to the projector screen and click <b>Full screen</b>. It updates by itself as you enter scores, and shows each division (and each page of a long list) in turn every 15 seconds.</p>
 
 <h2 id="print">9. Printing</h2>
 <p>On the <b>Print</b> tab choose what to print, for all divisions (one per page) or just this one, then click <b>Print…</b>. To make a PDF, choose “Save as PDF” in the print window.</p>
 <ul>
   <li><b>Pairings</b> for the current round, with table numbers, or for any earlier round (to reprint a lost sheet).</li>
+  <li><b>Result slips</b>: one slip per table, two to a row, with both names (* = starts), score boxes, a spread box and signature lines.</li>
   <li><b>Results</b> for any round, optionally with the standings after it.</li>
   <li><b>Standings</b> after the last finished round, or after any earlier round.</li>
-  <li><b>Prize list</b>: the top places (set how many; this is the same number as Gibsonization's prizes), the highest win, highest losing score, high game, best spread and high word, worked out after the last finished round. Players tied on wins and spread share a place, and all ties are listed. Byes and designated results don't count for the game prizes. Class or newcomer prizes are not worked out yet.</li>
+  <li><b>Prize list</b>: the top places (set how many; this is the same number as Gibsonization's prizes), the highest win, highest losing score, high game, best spread and high word, worked out after the last finished round. Players tied on wins and spread share a place, and all ties are listed. Byes, designated results and forfeits don't count for the game prizes. With classes ticked it also shows the best in each class, and you can add <b>tuff luck</b> (three closest losses), <b>lucky stiff</b> (three narrowest wins), <b>highest average</b> and <b>best over rounds N to M</b> (for a day prize).</li>
   <li><b>Scorecards</b>: one per player, round by round, with blank rows for rounds still to come.</li>
   <li><b>Wall chart</b>: every player's results in a grid (prints landscape).</li>
   <li><b>Full schedule</b> for a round robin.</li>

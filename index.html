@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-MZQL2QOTMzJwsFs0DWCMDsxMBRPDlQrnxRcqHmFSGO4='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-El9Q82WkLdo3cxcjCqBG2esrITAv8/jaeI8Tnnp8IUc='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>PairMaster</title>
 <style>
 :root {
@@ -101,22 +101,39 @@ table.wall td.w { font-weight: 600; }
   .cards { gap: 8px; }
   table.wall { font-size: 8.5pt; }
 }
+.missing-list { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px dashed var(--line); font-size: 13px; }
+button.pill { cursor: pointer; border: 0; font: inherit; }
+.slips { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.slip { border: 1px dashed #888; border-radius: 6px; padding: 8px 10px; break-inside: avoid; page-break-inside: avoid; font-size: 12px; }
+.slip-head { margin-bottom: 4px; }
+.slip table { width: 100%; }
+.slip-name { width: 65%; }
+.slip-box { border: 1px solid #555 !important; height: 26px; }
+.slip-sign { margin-top: 8px; font-size: 11px; color: #444; }
+body.board { padding: 28px 40px; font-size: 30px; }
+body.board h1 { font-size: 44px; margin: 0 0 6px; }
+body.board h2 { font-size: 24px; font-weight: normal; color: var(--muted); margin: 0 0 18px; }
+body.board td, body.board th { padding: 6px 14px; font-size: 30px; }
+body.board #board-full { position: fixed; right: 16px; bottom: 16px; font-size: 14px; }
+.banner.practice { background: #f0a020; color: #1d1d1f; }
+body.practicing .topbar { box-shadow: inset 0 -4px 0 #f0a020; }
 
 </style>
 </head>
 <body>
 <header class="topbar no-print">
-  <div class="brand">PairMaster <span class="version">1.1</span></div>
+  <div class="brand">PairMaster <span class="version">1.2</span></div>
   <div class="event" id="event-label"></div>
   <div class="spacer"></div>
   <span class="saved" id="saved-label"></span>
+  <button id="btn-practice" class="small" title="Try PairMaster safely on a made-up event (a dry run). Your real tournament is not touched.">Practice</button>
   <a class="help" id="btn-help" href="guide.html" target="_blank" rel="noopener" title="User guide">Help</a>
   <button id="btn-undo" title="Undo the last change (Ctrl+Z or Cmd+Z)" disabled>↶ Undo</button>
   <button id="btn-new">New</button>
   <button id="btn-folder" class="small" hidden title="Folder where .TOU files are saved"></button>
-  <button id="btn-open">Open .TOU</button>
-  <button id="btn-save" class="primary">Save .TOU</button>
-  <input type="file" id="file-input" accept=".tou,.TOU,text/plain" hidden>
+  <button id="btn-open" title="Open a PairMaster event file (.pairmaster) or an AuPair .TOU file">Open</button>
+  <button id="btn-save" class="primary" title="Saves the .TOU file (for AuPair and ratings) and the .pairmaster event file (everything else)">Save</button>
+  <input type="file" id="file-input" accept=".pairmaster,.tou,.TOU,text/plain" hidden>
 </header>
 <div id="banner" class="banner no-print" hidden></div>
 <nav class="tabs no-print" id="tabs">
@@ -204,26 +221,41 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     return g.score >= PM.MIN_SCORE && !!og && og.score >= PM.MIN_SCORE;
   };
 
-  // Result of one round for one player, or null if nothing to count yet.
-  PM.gameResult = function (sec, p, round) {
+  // Result of one round for one player, or null if nothing to count yet. t (optional) gives the tournament's
+  // scoring settings: byeSpread (default 1) and spreadCap (maximum spread per game, standings only).
+  // A forfeit, or a forfeit code read from a .TOU, carries its own margin (g.margin).
+  PM.gameResult = function (sec, p, round, t) {
     var g = PM.game(sec, p, round);
     if (!g) return null;
     if (g.opp === p) {
       if (g.rawOpp) return null; // AuPair left this player without an opponent: needs a pairing
       var k = g.nongame || 'D';
+      var bye = t && Number.isInteger(t.byeSpread) ? t.byeSpread : 1;
       return {
         win: k === 'W' ? 1 : k === 'D' ? 0.5 : 0,
-        spread: k === 'W' ? 1 : 0,
+        spread: g.margin !== undefined && k !== 'D' ? (k === 'W' ? g.margin : -g.margin) : k === 'W' ? bye : 0,
+        forfeit: !!g.forfeit,
         score: k === 'D' ? g.score : 0, // notional half-game score (AuPair uses 350), counted in total score
         played: false, nongame: true, kind: k
       };
     }
     if (!PM.isPlayed(sec, p, round)) return null;
-    var os = PM.game(sec, g.opp, round).score;
+    var os = PM.game(sec, g.opp, round).score, d = g.score - os;
+    if (t && Number.isInteger(t.spreadCap) && t.spreadCap > 0) d = Math.max(-t.spreadCap, Math.min(t.spreadCap, d));
     return {
       win: g.score > os ? 1 : g.score === os ? 0.5 : 0,
-      spread: g.score - os, score: g.score, played: true, nongame: false
+      spread: d, score: g.score, played: true, nongame: false
     };
+  };
+
+  // Player p forfeits round r (WESPA Rule 2.3.6, e.g. lateness): the opponent wins by the tournament's
+  // forfeit margin (default 100), p loses by it. Neither counts for ratings; both are recorded at once.
+  PM.setForfeit = function (t, sec, round, p) {
+    var g = PM.game(sec, p, round);
+    if (!g || g.opp === p) throw new Error('A forfeit needs a paired game.');
+    var q = g.opp, m = t && Number.isInteger(t.forfeitMargin) && t.forfeitMargin >= 0 ? t.forfeitMargin : 100;
+    sec.players[q].games[round - 1] = { opp: q, score: 0, first: false, nongame: 'W', forfeit: true, margin: m };
+    sec.players[p].games[round - 1] = { opp: p, score: 0, first: false, nongame: 'L', forfeit: true, margin: m };
   };
 
   PM.roundsDrawn = function (sec) {
@@ -256,16 +288,17 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     return out;
   };
 
-  PM.standings = function (t, sec, upToRound) {
+  // fromRound (optional, default 1): count only rounds fromRound..upToRound, e.g. for "best of day 2" prizes.
+  PM.standings = function (t, sec, upToRound, fromRound) {
     if (upToRound === undefined || upToRound === null) upToRound = PM.roundsComplete(sec);
     var rows = sec.players.map(function (pl, p) {
-      var r = { idx: p, wins: 0, losses: 0, spread: 0, total: 0, byes: 0, byeWins: 0, byeSpread: 0, games: 0 };
-      for (var round = 1; round <= upToRound; round++) {
-        var res = PM.gameResult(sec, p, round);
+      var r = { idx: p, wins: 0, losses: 0, spread: 0, total: 0, byes: 0, byeWins: 0, byeSpread: 0, games: 0, firsts: 0, seconds: 0 };
+      for (var round = Math.max(1, fromRound || 1); round <= upToRound; round++) {
+        var res = PM.gameResult(sec, p, round, t);
         if (!res) continue;
         r.wins += res.win; r.losses += 1 - res.win; r.spread += res.spread; r.total += res.score;
         if (res.nongame) { r.byes++; r.byeWins += res.win; r.byeSpread += res.spread; }
-        else r.games++;
+        else { r.games++; if (PM.game(sec, p, round).first) r.firsts++; else r.seconds++; }
       }
       return r;
     });
@@ -285,7 +318,9 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (!g || seen[p]) return;
       seen[p] = true;
       if (g.opp === p) {
-        nongames.push({ a: p, b: null, aScore: 0, bScore: 0, aFirst: false, bFirst: false, outcome: 'nongame', winner: null, margin: 0, nongame: g.rawOpp ? null : g.nongame || 'D' });
+        var ng = { a: p, b: null, aScore: 0, bScore: 0, aFirst: false, bFirst: false, outcome: 'nongame', winner: null, margin: g.margin || 0, nongame: g.rawOpp ? null : g.nongame || 'D' };
+        if (g.margin !== undefined && g.nongame !== 'D') ng.forfeit = true;
+        nongames.push(ng);
         return;
       }
       var og = PM.game(sec, g.opp, round);
@@ -331,6 +366,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   PM.validTournament = function (t) {
     if (!t || typeof t !== 'object' || !Array.isArray(t.sections) || typeof t.title !== 'string' ||
         typeof t.date !== 'string' || (t.rankMethod !== 'M' && t.rankMethod !== 'A')) return false;
+    var whole = function (v) { return v === undefined || Number.isInteger(v); };
+    if (!whole(t.forfeitMargin) || !whole(t.byeSpread) || !whole(t.spreadCap)) return false;
     return t.sections.every(function (s) {
       if (!s || typeof s.name !== 'string' || !Array.isArray(s.players)) return false;
       // Division settings end up in the page: only plain counts, known words and text are allowed.
@@ -339,16 +376,23 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (!count(s.totalRounds) || !count(s.prizes)) return false;
       if (s.gibsonMode !== undefined && ['off', 'first', 'decided'].indexOf(s.gibsonMode) < 0) return false;
       if (s.avoidSameSchool !== undefined && typeof s.avoidSameSchool !== 'boolean') return false;
+      if (s.useClasses !== undefined && typeof s.useClasses !== 'boolean') return false;
+      if (!count(s.schoolFrom) || !count(s.schoolTo)) return false;
+      var ex = s.prizeExtras;
+      if (ex !== undefined && (!ex || typeof ex !== 'object' || !count(ex.from) || !count(ex.to) ||
+          ['tuff', 'lucky', 'average'].some(function (k) { return ex[k] !== undefined && typeof ex[k] !== 'boolean'; }))) return false;
       if (s.highWord !== undefined && (!s.highWord || typeof s.highWord !== 'object' ||
           typeof s.highWord.text !== 'string' || !count(s.highWord.score))) return false;
       var n = s.players.length;
       return s.players.every(function (pl, p) {
         if (!pl || typeof pl.name !== 'string' || !Array.isArray(pl.games)) return false;
         if (pl.school !== undefined && typeof pl.school !== 'string') return false;
+        if (pl.klass !== undefined && typeof pl.klass !== 'string') return false;
         return pl.games.every(function (g, r) {
           if (g === null || g === undefined) return true; // a hole (saved as null)
           if (typeof g !== 'object' || !Number.isInteger(g.opp) || g.opp < 0 || g.opp >= n ||
               typeof g.score !== 'number' || !isFinite(g.score)) return false;
+          if (!whole(g.margin) || !whole(g.touCode) || (g.forfeit !== undefined && typeof g.forfeit !== 'boolean')) return false;
           if (g.opp === p) return true;
           var og = s.players[g.opp] && s.players[g.opp].games ? s.players[g.opp].games[r] : null;
           return !!og && og.opp === p;
@@ -375,6 +419,45 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (old.avoidSameSchool === true) s.avoidSameSchool = true;
     });
     return kept;
+  };
+
+  // Score typo guard: a message asking the director to check a score, or '' when it looks normal.
+  // AuPair makes you type three digits (098) so a dropped digit can't slip in; PairMaster asks instead.
+  PM.scoreCheck = function (sec, round, p, score) {
+    score = Number(score) || 0;
+    if (!score) return '';
+    if (score < 100) return 'Is ' + score + ' right? Scores under 100 are rare: check for a missing digit.';
+    var g = PM.game(sec, p, round), og = g && g.opp !== p ? PM.game(sec, g.opp, round) : null;
+    if (og && og.score >= PM.MIN_SCORE && Math.abs(score - og.score) > 350) {
+      return 'Is ' + score + ' right? That means a game won by ' + Math.abs(score - og.score) + ' (' + score + '–' + og.score + ').';
+    }
+    return '';
+  };
+
+  // Does the game a v b (at table) match what the director typed? A table number matches exactly;
+  // text matches the start of any word of either player's name.
+  PM.gameMatches = function (sec, a, b, table, q) {
+    q = String(q || '').trim().toLowerCase();
+    if (!q) return true;
+    if (/^\d+$/.test(q)) return table !== null && table !== undefined && String(table) === q;
+    return [a, b].some(function (p) {
+      if (p === null || p === undefined) return false;
+      var name = PM.displayName(sec.players[p].name).toLowerCase();
+      return name.indexOf(q) === 0 || name.split(/[\s'-]+/).some(function (w) { return w.indexOf(q) === 0; });
+    });
+  };
+
+  // How many games each player started and replied in, rounds 1..upTo (byes and designated results don't count).
+  PM.startCounts = function (sec, upTo) {
+    return sec.players.map(function (pl, p) {
+      var c = { first: 0, second: 0 };
+      for (var r = 1; r <= upTo; r++) {
+        var g = pl.games[r - 1];
+        if (!g || g.opp === p) continue;
+        if (g.first) c.first++; else c.second++;
+      }
+      return c;
+    });
   };
 
   PM.hasGames = function (sec) { return PM.roundsDrawn(sec) > 0; };
@@ -417,7 +500,10 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       // As AuPair writes them: a bye/designated win is 2001 (AuPair shows 1 only for a bye it has just drawn, and
       // a 1 read from such a file is kept until the round is finished); a designated draw is a half game with a
       // notional 350; a designated loss is 2. Checked by round trips through AuPair 6.16 (tests/fixtures).
-      var code = g.nongame === 'W' ? (g.code && !PM.isRoundComplete(sec, round) ? g.code : 2001)
+      // touCode: a code read from a file that this program writes differently (2003-2006 forfeits, 0000,
+      // 2075...), written back as it was. A forfeit made in PairMaster is written as a designated win/loss.
+      var code = g.touCode !== undefined ? g.touCode
+        : g.nongame === 'W' ? (g.code && !PM.isRoundComplete(sec, round) ? g.code : 2001)
         : g.nongame === 'L' ? 2 : 1000 + g.score;
       return ' ' + padLeft(code, 4) + padLeft(p + 1, 4);
     }
@@ -508,6 +594,9 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
             : (score === 2 || score === 4 || score === 6) ? 'L' : 'D';
           var ng = { opp: p, score: kind === 'D' ? score : 0, first: false, nongame: kind };
           if (kind === 'W' && field < 1000) ng.code = field; // a bye shown as 1 by AuPair: keep it until the round ends
+          // Forfeit codes AuPair's touprint knows: 3/4 = NASPA win/loss by 50, 5/6 = WESPA win/loss by 75.
+          if (score >= 3 && score <= 6) { ng.margin = score <= 4 ? 50 : 75; ng.touCode = field; }
+          else if (kind === 'D' && field !== 1000 + score) ng.touCode = field; // e.g. 0000 or 2075: same meaning, kept as written
           pl.games.push(ng);
         } else {
           pl.games.push({ opp: opp, score: score, first: first, nongame: null, _tok: tok[k + 1], _field: tok[k], _raw: rawText });
@@ -751,8 +840,10 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   function schoolKey(pl) { return String(pl.school || '').replace(/\s+/g, ' ').trim().toUpperCase(); }
   // same(a, b) for a division, or null unless the division's "avoid same school" option is ticked
   // and some players have a school.
-  PM.sameSchool = function (sec) {
+  // round (optional): only in the director's chosen rounds (schoolFrom..schoolTo, both optional).
+  PM.sameSchool = function (sec, round) {
     if (sec.avoidSameSchool !== true) return null;
+    if (round && ((sec.schoolFrom && round < sec.schoolFrom) || (sec.schoolTo && round > sec.schoolTo))) return null;
     var keys = sec.players.map(schoolKey);
     if (!keys.some(function (k) { return k; })) return null;
     return function (a, b) { return !!keys[a] && keys[a] === keys[b]; };
@@ -874,7 +965,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       order.splice(byeIdx, 1);
     }
 
-    var pairs, same = PM.sameSchool(sec);
+    var pairs, same = PM.sameSchool(sec, round);
     if (method === 'halves') pairs = halves(active.filter(function (p) { return order.indexOf(p) >= 0; }), round - 1);
     else if (method === 'quarters12') pairs = fewestSame(function () { return quarters12(order, rng); }, same);
     else if (method === 'chance') pairs = fewestSame(function () { return consecutive(shuffle(order, rng)); }, same);
@@ -1081,7 +1172,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
 
 // PairMaster — data for printed reports: player scorecards and the division wall chart.
 // Result codes: 'W' won, 'L' lost, 'T' tie, 'bye' bye / designated win, 'dL' designated loss,
-// 'dD' designated draw, 'pending' drawn but no result yet, '' not drawn yet.
+// 'dD' designated draw, 'fW'/'fL' forfeit win/loss, 'pending' drawn but no result yet, '' not drawn yet.
 var PM = (typeof PM !== 'undefined') ? PM : {};
 
 (function (PM) {
@@ -1093,7 +1184,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     if (g.opp === p) {
       if (g.rawOpp) return { opp: null, first: false, result: 'pending', score: null, oppScore: null };
       var k = g.nongame || 'D';
-      return { opp: null, first: false, result: k === 'W' ? 'bye' : k === 'L' ? 'dL' : 'dD', score: null, oppScore: null };
+      var code = g.margin !== undefined && k !== 'D' ? (k === 'W' ? 'fW' : 'fL') : k === 'W' ? 'bye' : k === 'L' ? 'dL' : 'dD';
+      return { opp: null, first: false, result: code, score: null, oppScore: null };
     }
     var og = PM.game(sec, g.opp, r);
     if (!PM.isPlayed(sec, p, r)) return { opp: g.opp, first: !!g.first, result: 'pending', score: null, oppScore: null };
@@ -1111,7 +1203,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     for (var r = 1; r <= rounds; r++) {
       var c = cell(sec, p, r);
       if (!c) { rows.push({ round: r, table: null, opp: null, first: false, score: null, oppScore: null, result: '', wins: null, spread: null }); continue; }
-      var res = PM.gameResult(sec, p, r);
+      var res = PM.gameResult(sec, p, r, t);
       if (res) { wins += res.win; spread += res.spread; }
       var tb = c.opp !== null ? tablesFor(r)[si + ':' + p] : undefined;
       rows.push({
@@ -1121,6 +1213,34 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       });
     }
     return rows;
+  };
+
+  // Results still to come in a round: games without both scores (with their table) and players who need an
+  // opponent (table null). For the "who is missing?" list; sorted by table.
+  PM.missingGames = function (t, si, round) {
+    var sec = t.sections[si], tables = PM.assignTables(t, round), out = [], seen = {};
+    PM.missingResults(sec, round).forEach(function (p) {
+      if (seen[p]) return;
+      var g = PM.game(sec, p, round);
+      if (!g) return;
+      seen[p] = true;
+      if (g.opp === p) { out.push({ table: null, a: p, b: null }); return; }
+      seen[g.opp] = true;
+      var a = Math.min(p, g.opp), b = Math.max(p, g.opp);
+      out.push({ table: tables[si + ':' + a] === undefined ? null : tables[si + ':' + a], a: a, b: b });
+    });
+    return out.sort(function (x, y) { return (x.table === null ? 1e9 : x.table) - (y.table === null ? 1e9 : y.table); });
+  };
+
+  // Result slips for a round: one per game, in table order (TSH tally slips). Byes and designated results get none.
+  PM.resultSlips = function (t, si, round) {
+    var sec = t.sections[si], tables = PM.assignTables(t, round), out = [];
+    sec.players.forEach(function (pl, p) {
+      var g = PM.game(sec, p, round);
+      if (!g || g.opp === p || g.opp < p) return;
+      out.push({ table: tables[si + ':' + p] === undefined ? null : tables[si + ':' + p], a: p, b: g.opp, aFirst: !!g.first, bFirst: !!PM.game(sec, g.opp, round).first });
+    });
+    return out.sort(function (x, y) { return (x.table || 0) - (y.table || 0); });
   };
 
   // Every player (in player-number order) with a cell per drawn round, totals and rank.
@@ -1133,9 +1253,10 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         var cells = [];
         for (var r = 1; r <= rounds; r++) {
           var c = cell(sec, p, r);
+          var res = c && c.opp === null ? PM.gameResult(sec, p, r, t) : null;
           cells.push(c && {
             opp: c.opp, first: c.first, result: c.result,
-            margin: c.result === 'bye' ? 1 : c.score !== null ? Math.abs(c.score - c.oppScore) : 0
+            margin: res ? Math.abs(res.spread) : c.score !== null ? Math.abs(c.score - c.oppScore) : 0
           });
         }
         var st = byIdx[p];
@@ -1192,8 +1313,21 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
 (function (PM) {
   'use strict';
 
+  function classKey(pl) { return String(pl.klass || '').replace(/\s+/g, ' ').trim(); }
+  function topWithTies(rows, key, places) {
+    var out = [];
+    rows.slice(0, places).forEach(function (r, i) {
+      var prev = out[i - 1], shared = prev && prev.wins === r.wins && prev.value === r[key];
+      out.push({ place: shared ? prev.place : i + 1, idx: r.idx, wins: r.wins, value: r[key], tied: !!shared });
+      if (shared) prev.tied = true;
+    });
+    return out;
+  }
+
   // places: how many top places to list. upTo: last round counted (default: last finished round).
-  PM.prizeList = function (t, sec, places, upTo) {
+  // opts.from/opts.to: also rank players over those rounds only ("best of day 2").
+  PM.prizeList = function (t, sec, places, upTo, opts) {
+    opts = opts || {};
     if (upTo === undefined || upTo === null) upTo = PM.roundsComplete(sec);
     places = Math.max(1, places || 3);
     var key = t.rankMethod === 'A' ? 'total' : 'spread';
@@ -1242,7 +1376,139 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (out.bestSpread.spread === null || row.spread > out.bestSpread.spread) out.bestSpread = { spread: row.spread, players: [row.idx] };
       else if (row.spread === out.bestSpread.spread) out.bestSpread.players.push(row.idx);
     });
+
+    // Best player in each class (only when the division uses classes): the first of that class in the standings.
+    out.classes = [];
+    if (sec.useClasses === true) {
+      var seen = {};
+      rows.forEach(function (row) {
+        var k = classKey(sec.players[row.idx]), key = k.toUpperCase();
+        if (!k) return;
+        if (!seen[key]) { seen[key] = { klass: k, players: [row.idx], wins: row.wins, value: row[out.key] }; out.classes.push(seen[key]); }
+        else if (seen[key].wins === row.wins && seen[key].value === row[out.key]) seen[key].players.push(row.idx);
+      });
+      out.classes.sort(function (a, b) { return a.klass.localeCompare(b.klass); });
+    }
+
+    // Tuff luck (three closest losses), lucky stiff (three narrowest wins), highest average score.
+    // Only played games count; the lowest total wins tuff luck and lucky stiff.
+    var margins = sec.players.map(function () { return { wins: [], losses: [], total: 0, games: 0 }; });
+    for (var r2 = 1; r2 <= upTo; r2++) {
+      sec.players.forEach(function (pl, p) {
+        var g = PM.game(sec, p, r2);
+        if (!g || g.opp === p || !PM.isPlayed(sec, p, r2)) return;
+        var d = g.score - PM.game(sec, g.opp, r2).score, m = margins[p];
+        m.total += g.score; m.games++;
+        if (d > 0) m.wins.push(d); else if (d < 0) m.losses.push(-d);
+      });
+    }
+    function threeClosest(list) { return list.length < 3 ? null : list.slice().sort(function (a, b) { return a - b; }).slice(0, 3).reduce(function (a, b) { return a + b; }, 0); }
+    function lowest(field) {
+      var best = { total: 0, players: [] };
+      margins.forEach(function (m, p) {
+        var v = threeClosest(m[field]);
+        if (v === null) return;
+        if (!best.players.length || v < best.total) best = { total: v, players: [p] };
+        else if (v === best.total) best.players.push(p);
+      });
+      return best;
+    }
+    out.tuffLuck = lowest('losses');
+    out.luckyStiff = lowest('wins');
+    out.average = { avg: 0, players: [] };
+    margins.forEach(function (m, p) {
+      if (!m.games) return;
+      var avg = Math.round(m.total / m.games * 10) / 10;
+      if (avg > out.average.avg) out.average = { avg: avg, players: [p] };
+      else if (avg === out.average.avg) out.average.players.push(p);
+    });
+
+    if (opts.from && opts.to && opts.to >= opts.from) {
+      var to = Math.min(opts.to, upTo);
+      out.roundsBest = { from: opts.from, to: to, places: to >= opts.from ? topWithTies(PM.standings(t, sec, to, opts.from), out.key, places) : [] };
+    }
     return out;
+  };
+})(PM);
+
+// PairMaster — event file (.pairmaster): the whole tournament, including what a .TOU file can't hold
+// (schools, the same-school option, classes, prize places, total rounds, Gibsonization, forfeits).
+// The .TOU stays the file for AuPair and the ratings officer.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+  var FORMAT = 'PairMaster event', FORMAT_VERSION = 1;
+  var SKIP = { lastSavedName: true, lastBackupRounds: true };
+
+  PM.APP_VERSION = '1.2'; // filled in by build.py
+
+  PM.writeEvent = function (t) {
+    var copy = JSON.parse(JSON.stringify(t, function (k, v) { return SKIP[k] ? undefined : v; }));
+    return JSON.stringify({ format: FORMAT, formatVersion: FORMAT_VERSION, savedBy: 'PairMaster ' + PM.APP_VERSION, t: copy }, null, 1);
+  };
+
+  PM.parseEvent = function (text) {
+    var d;
+    try { d = JSON.parse(String(text)); } catch (e) { throw new Error('This is not a PairMaster event file (or it is damaged).'); }
+    if (!d || d.format !== FORMAT) throw new Error('This is not a PairMaster event file.');
+    if (d.formatVersion > FORMAT_VERSION) throw new Error('This event file was saved by a newer version of PairMaster. Please update PairMaster.');
+    if (!PM.validTournament(d.t)) throw new Error('This PairMaster event file is damaged and cannot be opened.');
+    return d.t;
+  };
+
+  PM.eventFileName = function (title) {
+    return PM.touFileName(title).replace(/\.TOU$/, '') + '.pairmaster';
+  };
+})(PM);
+
+// PairMaster — practice mode (a dry run for new directors, like TSH's DRYrun/RANDomscores) and backup names.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+  var FIRST = ['Aina', 'Badrul', 'Chong Wei', 'Deepa', 'Ehsan', 'Farah', 'Gopal', 'Hui Min', 'Irfan', 'Jasmin', 'Kumar', 'Lina',
+    'Mei Ling', 'Nabil', 'Opal', 'Prem', 'Qistina', 'Rajan', 'Siti', 'Tan'];
+  var LAST = ['Abdullah', 'Bakar', 'Chua', 'Devan', 'Ehsan', 'Fong', 'Gan', 'Hassan', 'Ismail', 'Jamil', 'Kaur', 'Lim',
+    'Mohan', 'Noor', 'Ong', 'Pillai', 'Quek', 'Rahman', 'Singh', 'Teo'];
+  var SCHOOLS = ['Hillview School', 'Riverside School', 'Lakeside School', 'Parkland School'];
+
+  // A made-up event: division A (14 players, schools on) and division B (9 players, so someone gets a bye).
+  PM.sampleTournament = function () {
+    var t = PM.newTournament('', 'Practice tournament', 'M');
+    var a = PM.addSection(t, 'A'), b = PM.addSection(t, 'B');
+    a.avoidSameSchool = true;
+    for (var i = 0; i < 14; i++) {
+      var pl = PM.addPlayer(a, FIRST[i] + ' ' + LAST[(i * 7) % 20]);
+      pl.school = SCHOOLS[i % 4];
+    }
+    for (var j = 0; j < 9; j++) PM.addPlayer(b, FIRST[(j + 11) % 20] + ' ' + LAST[(j * 3 + 5) % 20]);
+    a.totalRounds = 7; b.totalRounds = 7;
+    return t;
+  };
+
+  // Fill in believable scores (250-600, never a tie) for every game in the round that has no result yet.
+  // Returns how many games were filled.
+  PM.randomScores = function (sec, round, rng) {
+    rng = rng || Math.random;
+    var n = 0;
+    sec.players.forEach(function (pl, p) {
+      var g = PM.game(sec, p, round);
+      if (!g || g.opp === p || g.opp < p) return;
+      var og = PM.game(sec, g.opp, round);
+      if (g.score >= PM.MIN_SCORE && og.score >= PM.MIN_SCORE) return;
+      var x = 250 + Math.floor(rng() * 351), y = 250 + Math.floor(rng() * 351);
+      if (x === y) y = y > 250 ? y - 1 : y + 1;
+      PM.setScore(sec, round, p, x); PM.setScore(sec, round, g.opp, y);
+      n++;
+    });
+    return n;
+  };
+
+  // The numbered copy saved automatically after a round finishes, e.g. KLOPEN26-R05.TOU.
+  PM.backupFileNames = function (name, round) {
+    var base = (name || 'TOURNEY') + '-R' + (round < 10 ? '0' : '') + round;
+    return [base + '.TOU', base + '.pairmaster'];
   };
 })(PM);
 
@@ -1271,21 +1537,63 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   function isoToDmy(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? m[3] + '.' + m[2] + '.' + m[1] : ''; }
   function fmtSigned(n) { return n > 0 ? '+' + n : String(n); }
   function fmtWins(w) { return String(w).replace('.5', '½'); }
+  function forfeitMargin() { return Number.isInteger(st.t.forfeitMargin) ? st.t.forfeitMargin : 100; }
+  // Label for a game against yourself: bye, designated result or forfeit (with its margin).
+  function nongameLabel(g, style) {
+    if (g.margin !== undefined && g.nongame !== 'D') return (g.nongame === 'W' ? 'Forfeit win (+' : 'Forfeit loss (−') + g.margin + ')';
+    return (style === 'print' ? { W: 'Bye', L: 'Not playing', D: 'Designated draw' }
+      : style === 'results' ? { W: 'Bye (counts as a win)', L: 'Designated loss', D: 'Designated draw' }
+      : { W: 'Bye / designated win', L: 'Designated loss', D: 'Designated draw' })[g.nongame || 'D'];
+  }
 
   // ---------- persistence ----------
+  // Practice mode keeps its own autosave, so the real tournament is never touched.
+  var practice = false;
+  function activeKey() { return practice ? STORE_KEY + '.practice' : STORE_KEY; }
   function save() {
     undoLog.record(st.t);
     renderUndo();
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ t: st.t, sec: st.sec, round: st.round, tab: st.tab }));
-      $('saved-label').textContent = 'Autosaved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      localStorage.setItem(activeKey(), JSON.stringify({ t: st.t, sec: st.sec, round: st.round, tab: st.tab }));
+      $('saved-label').textContent = (practice ? 'Practice autosaved ' : 'Autosaved ') + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       $('saved-label').textContent = 'Autosave unavailable – save .TOU files often';
     }
+    if (!practice) autoBackup();
+  }
+
+  // ---------- automatic backup: when a round finishes, save into the chosen folder without asking ----------
+  var backingUp = false;
+  async function autoBackup() {
+    var done = totalComplete();
+    if (backingUp || !canFolder || done <= (st.t.lastBackupRounds || 0)) return;
+    backingUp = true;
+    try {
+      if (!folder) folder = await idb('get');
+      // Only when the browser already allows it: asking for permission needs a click, so then the reminder stays.
+      if (!folder || (await folder.queryPermission({ mode: 'readwrite' })) !== 'granted') return;
+      var name = st.t.lastSavedName || PM.touFileName(st.t.title).replace(/\.TOU$/, '');
+      var round = st.t.sections.reduce(function (m, s) { return Math.max(m, PM.roundsComplete(s)); }, 0);
+      var tou = PM.writeTou(st.t), ev = PM.writeEvent(st.t), copies = PM.backupFileNames(name, round);
+      var sub = await folder.getDirectoryHandle('PairMaster backups', { create: true });
+      var files = [[name + '.TOU', tou], [name + '.pairmaster', ev]];
+      for (var i = 0; i < files.length; i++) {
+        var w = await (await folder.getFileHandle(files[i][0], { create: true })).createWritable(); await w.write(files[i][1]); await w.close();
+      }
+      var copy = [[copies[0], tou], [copies[1], ev]];
+      for (var j = 0; j < copy.length; j++) {
+        var w2 = await (await sub.getFileHandle(copy[j][0], { create: true })).createWritable(); await w2.write(copy[j][1]); await w2.close();
+      }
+      st.t.lastSavedName = name; st.t.lastBackupRounds = done;
+      localStorage.setItem(STORE_KEY, JSON.stringify({ t: st.t, sec: st.sec, round: st.round, tab: st.tab }));
+      renderBanner();
+      flash('Round ' + round + ' finished: saved ' + name + '.TOU and a copy in "PairMaster backups" ✓');
+    } catch (e) { /* the yellow reminder stays, so nothing is lost */ }
+    finally { backingUp = false; }
   }
   function load() {
     try {
-      var raw = localStorage.getItem(STORE_KEY);
+      var raw = localStorage.getItem(activeKey());
       if (!raw) return false;
       var d = JSON.parse(raw);
       if (!d || !PM.validTournament(d.t)) throw new Error('damaged');
@@ -1377,31 +1685,54 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var name = prompt('File name for the .TOU file (8 characters at most, no spaces):', st.t.lastSavedName || PM.touFileName(st.t.title));
     if (!name) return;
     name = name.toUpperCase().replace(/\.TOU$/, '').replace(/[^A-Z0-9_-]/g, '').slice(0, 8) || 'TOURNEY';
-    var file = name + '.TOU', text = PM.writeTou(st.t);
+    var file = name + '.TOU';
+    // The .TOU is for AuPair and the ratings officer; the event file next to it keeps everything else.
+    var files = [[file, PM.writeTou(st.t)], [name + '.pairmaster', PM.writeEvent(st.t)]];
     if (dir) {
-      try {
-        var exists = false;
-        try { await dir.getFileHandle(file); exists = true; } catch (e) { /* new file */ }
-        if (exists && name !== st.t.lastSavedName && !confirm(file + ' already exists in ' + dir.name + '. Replace it?')) return;
-        var w = await (await dir.getFileHandle(file, { create: true })).createWritable();
-        await w.write(text); await w.close();
-        flash('Saved ' + file + ' in ' + dir.name + ' ✓');
-      } catch (e) {
-        alert('Could not save in ' + dir.name + ' (' + e.message + '). It will be downloaded instead.');
-        download(text, file);
-      }
-    } else download(text, file);
+      var exists = false;
+      try { await dir.getFileHandle(file); exists = true; } catch (e) { /* new file */ }
+      if (exists && name !== st.t.lastSavedName && !confirm(file + ' already exists in ' + dir.name + '. Replace it?')) return;
+      if (!(await writeFiles(dir, files))) return;
+    } else files.forEach(function (f) { download(f[1], f[0]); });
     st.t.lastSavedName = name;
     st.t.lastBackupRounds = totalComplete();
     save(); renderBanner();
-    if (dir) flash('Saved ' + file + ' in ' + dir.name + ' ✓');
+    flash('Saved ' + file + ' and ' + name + '.pairmaster' + (dir ? ' in ' + dir.name : '') + ' ✓');
+  }
+  // Write [name, text] pairs into a folder; on failure, offer them as downloads. Returns true when written.
+  async function writeFiles(dir, files) {
+    try {
+      for (var i = 0; i < files.length; i++) {
+        var w = await (await dir.getFileHandle(files[i][0], { create: true })).createWritable();
+        await w.write(files[i][1]); await w.close();
+      }
+      return true;
+    } catch (e) {
+      alert('Could not save in ' + dir.name + ' (' + e.message + '). The files will be downloaded instead.');
+      files.forEach(function (f) { download(f[1], f[0]); });
+      return false;
+    }
+  }
+  function openFileText(fname, text) {
+    if (/\.pairmaster$/i.test(fname) || /^\s*\{/.test(text)) openEventText(fname, text); else openTouText(fname, text);
+  }
+  function openEventText(fname, text) {
+    try {
+      var t = PM.parseEvent(text);
+      if (!confirm('Open ' + fname + '? The tournament on screen will be replaced.')) return;
+      t.lastBackupRounds = t.sections.reduce(function (n, s) { return n + PM.roundsComplete(s); }, 0);
+      t.lastSavedName = fname.toUpperCase().replace(/\.PAIRMASTER$/, '').replace(/[^A-Z0-9_-]/g, '').slice(0, 8);
+      st.t = t; st.sec = 0; st.round = defaultRound(t.sections[0]); st.tab = 'round'; changed();
+    } catch (e) { alert('Could not open ' + fname + ': ' + e.message); }
   }
   function openTouText(fname, text) {
     try {
       var t = PM.parseTou(text);
       if (!t.sections.length) throw new Error('No divisions found in this file.');
       var warn = PM.lastParseWarnings || [];
-      if (!confirm('Open ' + fname + '? The tournament on screen will be replaced.' + (warn.length
+      if (!confirm('Open ' + fname + '? The tournament on screen will be replaced.' +
+        (st.t.sections.some(function (s) { return s.players.some(function (pl) { return pl.school || pl.klass; }); })
+          ? '\n\nA .TOU file has no schools, classes or other PairMaster settings. To keep those, open the .pairmaster event file saved with it instead.' : '') + (warn.length
         ? '\n\nThis file has ' + warn.length + ' problem' + (warn.length === 1 ? '' : 's') + ' (affected games will show "Needs an opponent"):\n• ' +
           warn.slice(0, 8).join('\n• ') + (warn.length > 8 ? '\n• …and ' + (warn.length - 8) + ' more' : '') : ''))) return;
       t.lastBackupRounds = t.sections.reduce(function (n, s) { return n + PM.roundsComplete(s); }, 0);
@@ -1415,9 +1746,9 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (!folder) folder = await idb('get');
       try {
         var hs = await window.showOpenFilePicker({ id: 'pairmaster', startIn: folder || 'documents',
-          types: [{ description: 'Tournament files (.TOU)', accept: { 'text/plain': ['.tou', '.TOU'] } }] });
+          types: [{ description: 'PairMaster event or .TOU file', accept: { 'text/plain': ['.pairmaster', '.tou', '.TOU'] } }] });
         var f = await hs[0].getFile();
-        openTouText(f.name, await f.text());
+        openFileText(f.name, await f.text());
       } catch (e) { if (e && e.name !== 'AbortError') alert('Could not open the file: ' + e.message); }
       return;
     }
@@ -1430,9 +1761,26 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   // ---------- chrome ----------
   function renderBanner() {
     var b = $('banner'), done = totalComplete();
+    if (practice) {
+      b.hidden = false; b.className = 'banner practice no-print';
+      b.innerHTML = '<b>PRACTICE</b> – a made-up event to try things out. Your real tournament is safe and untouched. ' +
+        '<button id="pr-fill" class="small">Fill in random scores for round ' + st.round + '</button> ' +
+        '<button id="pr-restart" class="small">Start practice again</button> <button id="pr-leave" class="small primary">Leave practice</button>';
+      $('pr-fill').onclick = function () {
+        var s = sec(), r = st.tab === 'round' ? st.round : PM.roundsComplete(s) + 1;
+        if (r > PM.roundsDrawn(s)) { alert('Draw round ' + r + ' of division ' + s.name + ' first (Rounds & scores tab).'); return; }
+        var n = PM.randomScores(s, r);
+        flash(n ? 'Filled in ' + n + ' game' + (n === 1 ? '' : 's') + ' in division ' + s.name + ', round ' + r : 'Round ' + r + ' already has every result');
+        changed();
+      };
+      $('pr-restart').onclick = function () { if (confirm('Start the practice event again from the beginning?')) startPractice(true); };
+      $('pr-leave').onclick = leavePractice;
+      return;
+    }
+    b.className = 'banner no-print';
     if (done > 0 && done !== (st.t.lastBackupRounds || 0)) {
       b.hidden = false;
-      b.innerHTML = 'A round has finished since your last backup. <button id="banner-save" class="small">Save a .TOU backup now</button>';
+      b.innerHTML = 'A round has finished since your last save. <button id="banner-save" class="small">Save now</button>';
       $('banner-save').onclick = saveTou;
     } else b.hidden = true;
   }
@@ -1474,28 +1822,43 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var s = sec(), started = PM.hasGames(s);
     var otherSecs = st.t.sections.map(function (x, i) { return i; }).filter(function (i) { return i !== st.sec; });
     var schools = s.avoidSameSchool === true;
+    var classes = s.useClasses === true;
     var noSchool = schools ? s.players.filter(function (pl) { return !String(pl.school || '').trim(); }).length : 0;
     var h = '<div class="card"><h2>Tournament</h2><div class="row">' +
       '<label>Date</label><input type="date" id="t-date" value="' + dmyToIso(st.t.date) + '">' +
       '<label>Title</label><input id="t-title" size="34" value="' + esc(st.t.title) + '">' +
       '<label>Rank ties by</label><select id="t-rank"><option value="M"' + (st.t.rankMethod === 'M' ? ' selected' : '') +
       '>Spread (margin)</option><option value="A"' + (st.t.rankMethod === 'A' ? ' selected' : '') + '>Total score (aggregate)</option></select>' +
-      '</div></div>';
+      '</div><details><summary class="hint">Scoring rules: forfeit ' + forfeitMargin() + ', bye +' + (Number.isInteger(st.t.byeSpread) ? st.t.byeSpread : 1) +
+      (st.t.spreadCap ? ', spread cap ' + st.t.spreadCap : '') + '</summary>' +
+      '<div class="row"><label title="WESPA Rule 2.3.6: a game forfeited for lateness is a win by 100 for the opponent">Forfeit: opponent wins by</label>' +
+      '<input id="t-forfeit" type="number" min="0" max="999" style="width:70px" value="' + forfeitMargin() + '">' +
+      '<label>Bye or designated win counts as a win by</label><input id="t-bye" type="number" min="0" max="999" style="width:70px" value="' +
+      (Number.isInteger(st.t.byeSpread) ? st.t.byeSpread : 1) + '">' +
+      '<label title="Largest spread one game can add to the standings (used in Thailand). Leave empty for no cap.">Spread cap per game</label>' +
+      '<input id="t-cap" type="number" min="1" max="999" style="width:70px" placeholder="none" value="' + (st.t.spreadCap || '') + '"></div>' +
+      '<p class="hint">These change PairMaster\'s standings and prizes only. The .TOU file keeps the real scores, and stores forfeits as ' +
+      'designated wins and losses, which every ratings officer accepts; none of these games is rated. AuPair\'s own printout counts a bye as +1, ' +
+      'a designated loss as 0 and has no spread cap.</p></details></div>';
     h += '<div class="card"><h2>Division ' + esc(s.name) + ' – ' + s.players.length + ' players</h2>' +
       '<div class="row"><label>Division name</label><input id="s-name" size="16" value="' + esc(s.name) + '">' +
       '<button id="s-sort" class="small">Sort A–Z</button>' +
       (st.t.sections.length > 1 && !started ? '<button id="s-del" class="small danger">Delete division</button>' : '') + '</div>' +
-      '<div class="row"><label><input type="checkbox" id="s-school"' + (schools ? ' checked' : '') + '> Avoid pairing players from the same school or club</label></div>' +
+      '<div class="row"><label><input type="checkbox" id="s-school"' + (schools ? ' checked' : '') + '> Avoid pairing players from the same school or club</label>' +
+      '<label><input type="checkbox" id="s-class"' + (classes ? ' checked' : '') + '> Classes for prizes (e.g. Newcomer, Under 12)</label>' +
+      (schools ? '<span class="hint">Keep schoolmates apart in rounds</span><input id="s-sch-from" type="number" min="1" style="width:56px" placeholder="1" value="' + (s.schoolFrom || '') + '">' +
+        '<span class="hint">to</span><input id="s-sch-to" type="number" min="1" style="width:56px" placeholder="all" value="' + (s.schoolTo || '') + '">' : '') + '</div>' +
       (schools ? '<p class="hint">Type each player\'s school or club. The draw keeps schoolmates apart where it can (rematches are still avoided first).' +
         (noSchool ? ' <b>' + noSchool + ' player' + (noSchool === 1 ? ' has' : 's have') + ' no school yet</b> and can be paired with anyone.' : '') + '</p>' : '') +
       '<p class="hint">' + (started
         ? 'The draw has started. Players who leave should be marked <b>Missing</b> – they get a designated loss each round and are left out of the draw.'
         : 'Enter players in rating order, highest first, before the first draw. Add <b>@12</b> to a name to fix that player to table 12, or <b>@R</b> for a fixed table near the front.') + '</p>';
-    h += '<table><thead><tr><th class="num">#</th><th>Name</th>' + (schools ? '<th>School / club</th>' : '') + '<th>Missing</th><th></th></tr></thead><tbody>';
+    h += '<table><thead><tr><th class="num">#</th><th>Name</th>' + (schools ? '<th>School / club</th>' : '') + (classes ? '<th>Class</th>' : '') + '<th>Missing</th><th></th></tr></thead><tbody>';
     s.players.forEach(function (pl, p) {
       h += '<tr class="' + (pl.missing ? 'missing' : '') + '"><td class="num">' + (p + 1) + '</td>' +
         '<td><input class="name-input" data-name="' + p + '" maxlength="20" value="' + esc(pl.name) + '"></td>' +
         (schools ? '<td><input class="school-input" data-school="' + p + '" maxlength="30" size="14" value="' + esc(pl.school || '') + '"></td>' : '') +
+        (classes ? '<td><input class="school-input" data-klass="' + p + '" maxlength="20" size="10" value="' + esc(pl.klass || '') + '"></td>' : '') +
         '<td><input type="checkbox" data-miss="' + p + '"' + (pl.missing ? ' checked' : '') + ' title="Dropped out / absent"></td>' +
         '<td class="actions"><button class="small" data-up="' + p + '"' + (p === 0 ? ' disabled' : '') + '>↑</button> ' +
         '<button class="small" data-down="' + p + '"' + (p === s.players.length - 1 ? ' disabled' : '') + '>↓</button> ' +
@@ -1505,15 +1868,21 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     });
     h += '</tbody></table><div class="row" style="margin-top:10px"><input id="p-new" size="28" maxlength="20" placeholder="First name Surname, then Enter">' +
       (schools ? '<input id="p-new-school" size="16" maxlength="30" placeholder="School / club">' : '') +
+      (classes ? '<input id="p-new-class" size="10" maxlength="20" placeholder="Class">' : '') +
       '<button id="p-add" class="primary">Add player</button></div>' +
       '<details><summary class="hint">Paste a list of players (one per line)</summary>' +
-      (schools ? '<p class="hint">One player per line, with the school or club after a comma or a tab: <i>Ann Lee, Hillview School</i>. Names in one spreadsheet column and schools in the next can be copied and pasted straight in.</p>' : '') +
+      (schools || classes ? '<p class="hint">One player per line, with ' + (schools && classes ? 'the school and then the class' : schools ? 'the school or club' : 'the class') +
+        ' after a comma or a tab: <i>Ann Lee, ' + (schools ? 'Hillview School' : 'Newcomer') + (schools && classes ? ', Newcomer' : '') + '</i>. Columns copied from a spreadsheet can be pasted straight in.</p>' : '') +
       '<textarea id="p-bulk" rows="6" cols="40"></textarea><br><button id="p-bulk-add" class="small">Add all</button></details></div>';
     main.innerHTML = h;
 
     $('t-date').onchange = function () { st.t.date = isoToDmy(this.value) || st.t.date; changed(); };
     $('t-title').onchange = function () { st.t.title = this.value.trim(); changed(); };
     $('t-rank').onchange = function () { st.t.rankMethod = this.value; changed(); };
+    function whole(v, lo, hi) { var n = parseInt(v, 10); return isNaN(n) ? undefined : Math.max(lo, Math.min(hi, n)); }
+    $('t-forfeit').onchange = function () { var n = whole(this.value, 0, 999); if (n === undefined || n === 100) delete st.t.forfeitMargin; else st.t.forfeitMargin = n; changed(); };
+    $('t-bye').onchange = function () { var n = whole(this.value, 0, 999); if (n === undefined || n === 1) delete st.t.byeSpread; else st.t.byeSpread = n; changed(); };
+    $('t-cap').onchange = function () { var n = whole(this.value, 1, 999); if (n === undefined) delete st.t.spreadCap; else st.t.spreadCap = n; changed(); };
     $('s-name').onchange = function () { s.name = this.value.trim().toUpperCase().slice(0, 20) || s.name; changed(); };
     $('s-sort').onclick = function () {
       var order = s.players.map(function (x, i) { return i; });
@@ -1524,24 +1893,38 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (!confirm('Delete division ' + s.name + ' and its players?')) return;
       st.t.sections.splice(st.sec, 1); st.sec = 0; changed();
     };
-    function addName(n, school) {
+    function addName(n, school, klass) {
       n = n.replace(/\s+/g, ' ').trim();
       school = String(school || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+      klass = String(klass || '').replace(/\s+/g, ' ').trim().slice(0, 20);
       if (!n) return;
       var pl = PM.addPlayer(s, n.slice(0, 20));
       if (school) pl.school = school;
+      if (klass) pl.klass = klass;
     }
     $('s-school').onchange = function () { if (this.checked) s.avoidSameSchool = true; else delete s.avoidSameSchool; changed(); };
-    $('p-add').onclick = function () { addName($('p-new').value, schools ? $('p-new-school').value : ''); changed(); $('p-new').focus(); };
+    $('s-class').onchange = function () { if (this.checked) s.useClasses = true; else delete s.useClasses; changed(); };
+    function roundSetting(id, key) { if ($(id)) $(id).onchange = function () { var n = parseInt(this.value, 10); if (n > 0) s[key] = n; else delete s[key]; changed(); }; }
+    roundSetting('s-sch-from', 'schoolFrom'); roundSetting('s-sch-to', 'schoolTo');
+    $('p-add').onclick = function () { addName($('p-new').value, schools ? $('p-new-school').value : '', classes ? $('p-new-class').value : ''); changed(); $('p-new').focus(); };
+    if (classes) $('p-new-class').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
     $('p-new').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
     if (schools) $('p-new-school').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
     $('p-bulk-add').onclick = function () {
       $('p-bulk').value.split(/\n/).forEach(function (line) {
-        var cut = schools ? line.search(/[\t,]/) : -1;
-        if (cut < 0) addName(line); else addName(line.slice(0, cut), line.slice(cut + 1).replace(/[\t,]+/g, ' '));
+        if (!schools && !classes) { addName(line); return; }
+        var parts = line.split(/[\t,]/);
+        addName(parts[0], schools ? parts[1] : '', classes ? parts[schools ? 2 : 1] : '');
       });
       changed();
     };
+    main.querySelectorAll('[data-klass]').forEach(function (inp) {
+      inp.onchange = function () {
+        var v = this.value.replace(/\s+/g, ' ').trim().slice(0, 20), pl = s.players[+this.dataset.klass];
+        if (v) pl.klass = v; else delete pl.klass;
+        changed();
+      };
+    });
     main.querySelectorAll('[data-school]').forEach(function (inp) {
       inp.onchange = function () {
         var v = this.value.replace(/\s+/g, ' ').trim().slice(0, 30), pl = s.players[+this.dataset.school];
@@ -1671,11 +2054,11 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     h += '<div class="card"><div class="row"><h2 style="margin:0">Pairings &amp; scores</h2><select id="r-pick">' + opts + '</select>';
     if (r <= drawn) {
       var miss = PM.missingResults(s, r);
-      h += miss.length ? '<span id="r-pill" class="pill warn">' + miss.length + ' score' + (miss.length === 1 ? '' : 's') + ' to enter</span>'
-        : '<span id="r-pill" class="pill">All results in</span>';
+      h += '<button id="r-pill" class="pill' + (miss.length ? ' warn' : '') + '" title="Show who is missing">' +
+        (miss.length ? miss.length + ' score' + (miss.length === 1 ? '' : 's') + ' to enter ▾' : 'All results in') + '</button>';
       h += '<span class="spacer"></span><button id="r-clear" class="small danger">Clear this round</button>';
     }
-    h += '</div>';
+    h += '</div>' + (r <= drawn ? '<div id="r-missing" class="missing-list"' + (st.showMissing ? '' : ' hidden') + '></div>' : '');
     if (r > drawn) {
       h += '<p class="hint">Round ' + r + ' has not been drawn yet.</p></div>';
       main.innerHTML = h; bindDraw(s); return;
@@ -1700,7 +2083,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       }).join('');
     };
     h += '<p class="hint">Type a score and press Enter to jump to the next box. <span class="starter">*</span> = starts the game. Click ⇄ to change who starts.</p>' +
-      '<div class="row"><input id="r-find" placeholder="Find a player…" size="24"></div>' +
+      '<div class="row"><input id="r-find" placeholder="Table number or name, then Enter" size="30" title="Shortcut: press / to come here">' +
+      '<span class="hint">Type a table number or the start of a name and press Enter to jump to that game.</span></div>' +
       '<table><thead><tr><th class="num">Table</th><th>Player</th><th class="num">Score</th><th class="num">Score</th><th>Opponent</th><th>Result</th><th></th></tr></thead><tbody>';
     rows.forEach(function (row) {
       var ga = PM.game(s, row.a, r), gb = PM.game(s, row.b, r);
@@ -1717,11 +2101,13 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         '<option value="L">' + nm(s, row.a) + ': designated loss</option><option value="W">' + nm(s, row.a) + ': designated win</option>' +
         '<option value="D">' + nm(s, row.a) + ': designated draw</option>' +
         '<option value="L' + row.b + '">' + nm(s, row.b) + ': designated loss</option><option value="W' + row.b + '">' + nm(s, row.b) + ': designated win</option>' +
+        '<option value="F' + row.a + '">' + nm(s, row.a) + ' forfeits (' + nm(s, row.b) + ' wins by ' + forfeitMargin() + ')</option>' +
+        '<option value="F' + row.b + '">' + nm(s, row.b) + ' forfeits (' + nm(s, row.a) + ' wins by ' + forfeitMargin() + ')</option>' +
         '<option value="D' + row.b + '">' + nm(s, row.b) + ': designated draw</option></select></td></tr>';
     });
     byes.forEach(function (p) {
       var g = PM.game(s, p, r), label = g.rawOpp ? 'Needs an opponent – use Pair with… or Change…'
-        : { W: 'Bye / designated win', L: 'Designated loss', D: 'Designated draw' }[g.nongame || 'D'];
+        : nongameLabel(g);
       h += '<tr><td></td><td>' + nm(s, p) + (s.players[p].missing ? ' <span class="pill warn">missing</span>' : '') + '</td><td colspan="3"><span class="pill">' + label + '</span></td><td></td>' +
         '<td class="actions"><select class="small" data-ngself="' + p + '"><option value="">Change…</option><option value="W">Designated win</option><option value="L">Designated loss</option><option value="D">Designated draw</option></select> ' +
         '<select class="small" data-repair="' + p + '">' + playerOpts(p).replace('Change opponent…', 'Pair with…') + '</select></td></tr>';
@@ -1779,32 +2165,61 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       PM.blankRound(s, r); st.round = Math.max(1, r - 1); changed();
     };
     var inputs = Array.prototype.slice.call(main.querySelectorAll('[data-score]'));
+    function renderMissing() {
+      var pill = $('r-pill'), list = $('r-missing'), miss = PM.missingGames(st.t, st.sec, r);
+      if (pill) { pill.className = 'pill' + (miss.length ? ' warn' : ''); pill.textContent = miss.length ? PM.missingResults(s, r).length + ' score' + (PM.missingResults(s, r).length === 1 ? '' : 's') + ' to enter ▾' : 'All results in'; }
+      if (list) list.innerHTML = miss.length ? '<b>Still to come in round ' + r + ':</b> ' + miss.map(function (x) {
+        return x.b === null ? nm(s, x.a) + ' (needs an opponent)' : (x.table ? 'Table ' + x.table + ': ' : '') + nm(s, x.a) + ' v ' + nm(s, x.b);
+      }).join(' · ') : 'All results are in.';
+    }
+    renderMissing();
+    if ($('r-pill')) $('r-pill').onclick = function () { st.showMissing = !st.showMissing; $('r-missing').hidden = !st.showMissing; };
+    // Returns false when the director wants to correct the score (typo guard), so Enter doesn't move on.
+    function enterScore(inp) {
+      var v = inp.value.trim(), p = +inp.dataset.score, g0 = PM.game(s, p, r), was = g0 && g0.score ? String(g0.score) : '';
+      if (v === was) return true;
+      if (v !== '' && !/^\d{1,3}$/.test(v)) { alert('Enter a score from 0 to 999.'); inp.value = was; inp.select(); return false; }
+      var msg = PM.scoreCheck(s, r, p, v === '' ? 0 : parseInt(v, 10));
+      if (msg && !confirm(msg + '\n\nOK keeps it; Cancel lets you correct it.')) { inp.value = was; inp.focus(); inp.select(); return false; }
+      PM.setScore(s, r, p, v === '' ? 0 : parseInt(v, 10));
+      var g = PM.game(s, p, r);
+      var cellA = $('res-' + p) || $('res-' + g.opp);
+      if (cellA) cellA.innerHTML = resultText(s, p, r);
+      save(); renderBanner(); renderMissing();
+      return true;
+    }
     inputs.forEach(function (inp, i) {
-      inp.onchange = function () {
-        var v = this.value.trim();
-        if (v !== '' && !/^\d{1,3}$/.test(v)) { alert('Enter a score from 0 to 999.'); var g0 = PM.game(s, +this.dataset.score, r); this.value = g0 && g0.score ? g0.score : ''; return; }
-        var p = +this.dataset.score;
-        PM.setScore(s, r, p, v === '' ? 0 : parseInt(v, 10));
-        var g = PM.game(s, p, r);
-        var cellA = $('res-' + p) || $('res-' + g.opp);
-        if (cellA) cellA.innerHTML = resultText(s, p, r);
-        save(); renderBanner();
-        var pill = $('r-pill');
-        var miss = PM.missingResults(s, r).length;
-        if (pill) { pill.className = miss ? 'pill warn' : 'pill'; pill.textContent = miss ? miss + ' score' + (miss === 1 ? '' : 's') + ' to enter' : 'All results in'; }
-      };
+      inp.onchange = function () { enterScore(this); };
       inp.onkeydown = function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); this.onchange(); var n = inputs[i + 1]; if (n) { n.focus(); n.select(); } }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!enterScore(this)) return;
+        var n = inputs[i + 1], find = $('r-find');
+        // Finished a game found with the search box: go back to the box, ready for the next result slip.
+        if (find && find.value && (!n || n.closest('tr') !== this.closest('tr'))) { find.value = ''; find.oninput(); find.focus(); return; }
+        while (n && n.closest('tr').style.display === 'none') n = inputs[inputs.indexOf(n) + 1];
+        if (n) { n.focus(); n.select(); }
       };
     });
-    if ($('r-find')) $('r-find').oninput = function () {
-      var q = this.value.toLowerCase();
-      main.querySelectorAll('tr[data-row]').forEach(function (tr) {
-        var ps = tr.dataset.row.split(' ');
-        var hit = !q || ps.some(function (p) { return PM.displayName(s.players[+p].name).toLowerCase().indexOf(q) >= 0; });
-        tr.style.display = hit ? '' : 'none';
-      });
-    };
+    function rowTable(tr) { var t = parseInt(tr.children[0].textContent, 10); return isNaN(t) ? null : t; }
+    if ($('r-find')) {
+      $('r-find').oninput = function () {
+        var q = this.value;
+        main.querySelectorAll('tr[data-row]').forEach(function (tr) {
+          var ps = tr.dataset.row.split(' ');
+          tr.style.display = PM.gameMatches(s, +ps[0], +ps[1], rowTable(tr), q) ? '' : 'none';
+        });
+      };
+      $('r-find').onkeydown = function (e) {
+        if (e.key === 'Escape') { this.value = ''; this.oninput(); return; }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var vis = Array.prototype.filter.call(main.querySelectorAll('tr[data-row]'), function (tr) { return tr.style.display !== 'none'; });
+        if (!vis.length) return;
+        var box = Array.prototype.filter.call(vis[0].querySelectorAll('[data-score]'), function (x) { return !x.value; })[0] || vis[0].querySelector('[data-score]');
+        box.focus(); box.select();
+      };
+    }
     main.querySelectorAll('[data-toggle]').forEach(function (b) {
       b.onclick = function () { PM.toggleStart(s, r, +b.dataset.toggle); changed(); };
     });
@@ -1821,7 +2236,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         var kind = v.charAt(0), p = v.length > 1 ? +v.slice(1) : +this.dataset.ng;
         var g = PM.game(s, p, r), og = g && g.opp !== p ? PM.game(s, g.opp, r) : null;
         if (g && og && (g.score > 0 || og.score > 0) &&
-          !confirm('Scores are already entered for this game. Replace them with a designated result?')) { this.value = ''; return; }
+          !confirm('Scores are already entered for this game. Replace them with a ' + (kind === 'F' ? 'forfeit' : 'designated result') + '?')) { this.value = ''; return; }
+        if (kind === 'F') { PM.setForfeit(st.t, s, r, p); changed(); return; } // both players get their result at once
         var left = g && g.opp !== p ? g.opp : null;
         PM.setNongame(s, r, p, kind); changed();
         if (left !== null) alert(PM.displayName(s.players[left].name) + ' now has no opponent in round ' + r +
@@ -1840,7 +2256,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var key = st.t.rankMethod === 'A' ? 'total' : 'spread';
     var rows = PM.standings(st.t, s, upTo), anyBye = false;
     var h = '<table><thead><tr><th class="num">Rank</th><th>Player</th><th class="num">Wins</th><th class="num">Losses</th><th class="num">' +
-      (key === 'total' ? 'Total' : 'Spread') + '</th><th class="num">Games</th></tr></thead><tbody>';
+      (key === 'total' ? 'Total' : 'Spread') + '</th><th class="num">Games</th><th class="num" title="Games started (went first) – games replied (went second)">1st–2nd</th></tr></thead><tbody>';
     rows.forEach(function (x) {
       var w = fmtWins(x.wins), sp = key === 'total' ? String(x.total) : fmtSigned(x.spread);
       if (x.byes && (x.byeWins || x.byeSpread)) {
@@ -1849,10 +2265,11 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         if (key === 'spread') sp = fmtSigned(x.spread - x.byeSpread) + '<sup>(' + fmtSigned(x.byeSpread) + ')</sup>';
       }
       h += '<tr><td class="num">' + x.rank + '</td><td>' + nm(s, x.idx) + (s.players[x.idx].missing ? ' <span class="hint">(missing)</span>' : '') +
-        '</td><td class="num">' + w + '</td><td class="num">' + fmtWins(x.losses) + '</td><td class="num">' + sp + '</td><td class="num">' + x.games + '</td></tr>';
+        '</td><td class="num">' + w + '</td><td class="num">' + fmtWins(x.losses) + '</td><td class="num">' + sp + '</td><td class="num">' + x.games + '</td>' +
+        '<td class="num"' + (Math.abs(x.firsts - x.seconds) >= 2 ? ' title="Two or more off an even split"><b>' + x.firsts + '–' + x.seconds + '</b>' : '>' + x.firsts + '–' + x.seconds) + '</td></tr>';
     });
     h += '</tbody></table>';
-    if (anyBye) h += '<p class="hint">Bye and designated results are shown in brackets; they count for placings but not ratings.</p>';
+    if (anyBye) h += '<p class="hint">Byes, designated results and forfeits are shown in brackets; they count for placings but not ratings.</p>';
     return h;
   }
   function highLines(s) {
@@ -1865,9 +2282,11 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var upTo = st.standRound === null ? complete : Math.min(st.standRound, drawn);
     var opts = '';
     for (var i = 0; i <= drawn; i++) opts += '<option value="' + i + '"' + (i === upTo ? ' selected' : '') + '>After round ' + i + (i > complete ? ' (incomplete)' : '') + '</option>';
-    main.innerHTML = '<div class="card"><div class="row"><h2 style="margin:0">Standings – Division ' + esc(s.name) + '</h2><select id="st-pick">' + opts + '</select></div>' +
+    main.innerHTML = '<div class="card"><div class="row"><h2 style="margin:0">Standings – Division ' + esc(s.name) + '</h2><select id="st-pick">' + opts + '</select>' +
+      '<span class="spacer"></span><button id="st-board" class="small" title="Opens large standings in a new window for the hall screen; they update as you enter scores">Projector view ↗</button></div>' +
       standingsTable(s, upTo) + highLines(s) + '</div>';
     $('st-pick').onchange = function () { st.standRound = +this.value; render(); };
+    $('st-board').onclick = function () { window.open(location.href.split('#')[0] + (practice ? '#scoreboard-practice' : '#scoreboard'), 'pairmaster-board'); };
   }
 
   // ---------- printing ----------
@@ -1887,10 +2306,23 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       var x = rankOf[p];
       h += '<tr><td><span class="starter">' + (g.first ? '*' : '') + '</span>' + nm(s, p) + '</td>' +
         (prev > 0 ? '<td class="num">' + fmtWins(x.wins) + '</td><td class="num">' + (key === 'total' ? x.total : fmtSigned(x.spread)) + '</td>' : '');
-      if (g.opp === p) h += '<td></td><td>' + (g.rawOpp ? 'To be paired' : { W: 'Bye', L: 'Not playing', D: 'Designated draw' }[g.nongame || 'D']) + '</td></tr>';
+      if (g.opp === p) h += '<td></td><td>' + (g.rawOpp ? 'To be paired' : nongameLabel(g, 'print')) + '</td></tr>';
       else h += '<td class="num">' + (tables[si + ':' + p] || '') + '</td><td><span class="starter">' + (PM.game(s, g.opp, r).first ? '*' : '') + '</span>' + nm(s, g.opp) + '</td></tr>';
     });
     return h + '</tbody></table><p>The player with the asterisk (*) plays first.</p>';
+  }
+  function slipsPrint(s, si, r) {
+    var slips = PM.resultSlips(st.t, si, r);
+    if (!slips.length) return '<h1>' + esc(s.name) + ' – Result slips, round ' + r + '</h1><p>No games to play in this round.</p>';
+    function line(p, first) {
+      return '<tr><td class="slip-name"><span class="starter">' + (first ? '*' : '') + '</span>' + nm(s, p) + '</td><td class="slip-box"></td></tr>';
+    }
+    return '<div class="slips">' + slips.map(function (x) {
+      return '<div class="slip"><div class="slip-head"><b>' + esc(s.name) + '</b> · Round ' + r + (x.table ? ' · <b>Table ' + x.table + '</b>' : '') + '</div>' +
+        '<table><thead><tr><th>Player (* starts)</th><th>Score</th></tr></thead><tbody>' + line(x.a, x.aFirst) + line(x.b, x.bFirst) +
+        '<tr><td class="slip-name">Winner\'s spread</td><td class="slip-box"></td></tr></tbody></table>' +
+        '<div class="slip-sign">Winner\'s signature ____________ &nbsp; Loser\'s ____________</div></div>';
+    }).join('') + '</div>';
   }
   function schedulePrint(s) {
     var drawn = PM.roundsDrawn(s);
@@ -1931,7 +2363,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         '<td>' + who(x.b, x.bFirst, x.winner === x.b) + '</td><td>' + res + '</td></tr>';
     });
     rows.filter(function (x) { return x.b === null; }).forEach(function (x) {
-      var label = x.nongame === null ? 'Needs an opponent' : { W: 'Bye (counts as a win)', L: 'Designated loss', D: 'Designated draw' }[x.nongame];
+      var label = x.nongame === null ? 'Needs an opponent' : nongameLabel(PM.game(s, x.a, r), 'results');
       h += '<tr><td></td><td>' + nm(s, x.a) + '</td><td colspan="4">' + label + '</td></tr>';
     });
     h += '</tbody></table><p>* = played first.' + (pending ? ' <b>' + pending + ' result' + (pending === 1 ? ' is' : 's are') + ' not entered yet.</b>' : '') + '</p>';
@@ -1941,7 +2373,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     return h;
   }
   function prizesPrint(s) {
-    var pz = PM.prizeList(st.t, s, s.prizes || 3), drawn = PM.roundsDrawn(s);
+    var ex = s.prizeExtras || {};
+    var pz = PM.prizeList(st.t, s, s.prizes || 3, null, { from: ex.from, to: ex.to }), drawn = PM.roundsDrawn(s);
     var h = '<h1>' + esc(s.name) + ' – Prize list</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + (pz.round ? ' · after round ' + pz.round +
       (pz.round < drawn ? ' (round ' + (pz.round + 1) + ' is not finished, so it is not counted)' : '') : '') + '</h2>';
     if (!pz.round) return h + '<p>No round has finished yet.</p>';
@@ -1965,11 +2398,23 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       h += '<tr><td>' + (i ? '' : 'Best spread') + '</td><td><b>' + nm(s, p) + '</b></td><td>' + fmtSigned(pz.bestSpread.spread) + '</td></tr>';
     });
     if (pz.highWord) h += '<tr><td>High word</td><td colspan="2"><b>' + esc(pz.highWord.text) + '</b> ' + pz.highWord.score + '</td></tr>';
+    function many(label, players, detail) {
+      if (!players.length) { h += '<tr><td>' + label + '</td><td colspan="2" class="hint">nobody qualifies</td></tr>'; return; }
+      players.forEach(function (p, i) { h += '<tr><td>' + (i ? '' : label) + '</td><td><b>' + nm(s, p) + '</b></td><td>' + detail + '</td></tr>'; });
+    }
+    pz.classes.forEach(function (c) { many('Best ' + esc(c.klass), c.players, fmtWins(c.wins) + ' wins, ' + val(c.value)); });
+    if (ex.tuff) many('Tuff luck', pz.tuffLuck.players, 'three closest losses total ' + pz.tuffLuck.total);
+    if (ex.lucky) many('Lucky stiff', pz.luckyStiff.players, 'three narrowest wins total ' + pz.luckyStiff.total);
+    if (ex.average) many('Highest average', pz.average.players, pz.average.avg + ' a game');
+    if (pz.roundsBest) pz.roundsBest.places.forEach(function (x, i) {
+      h += '<tr><td>' + (i ? '' : 'Best in rounds ' + pz.roundsBest.from + '–' + pz.roundsBest.to) + '</td><td><b>' + nm(s, x.idx) + '</b></td><td>' +
+        ordinal(x.place) + (x.tied ? ' (tied)' : '') + ': ' + fmtWins(x.wins) + ' wins, ' + val(x.value) + '</td></tr>';
+    });
     h += '</tbody></table><p class="hint">Ties are all listed. Byes and designated results are not counted for the game prizes. ' +
       'Check the list before announcing it: one player may be due more than one prize.</p>';
     return h;
   }
-  var RESULT_TEXT = { W: 'Won', L: 'Lost', T: 'Tie', bye: 'Bye', dL: 'Desig. loss', dD: 'Desig. draw', pending: '', '': '' };
+  var RESULT_TEXT = { W: 'Won', L: 'Lost', T: 'Tie', bye: 'Bye', dL: 'Desig. loss', dD: 'Desig. draw', fW: 'Forfeit win', fL: 'Forfeit loss', pending: '', '': '' };
   function scorecardsPrint(s, si) {
     var rounds = Math.max(PM.roundsDrawn(s), s.totalRounds || 0, 1);
     var order = s.players.map(function (pl, p) { return p; });
@@ -2006,7 +2451,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         if (c) {
           var o = c.opp !== null ? (c.opp + 1) + (c.first ? '*' : '') + ' ' : '';
           txt = c.result === 'W' ? o + 'W+' + c.margin : c.result === 'L' ? o + 'L−' + c.margin : c.result === 'T' ? o + 'T'
-            : c.result === 'bye' ? 'bye' : c.result === 'dL' ? 'd.loss' : c.result === 'dD' ? 'd.draw' : o + '…';
+            : c.result === 'bye' ? 'bye' : c.result === 'dL' ? 'd.loss' : c.result === 'dD' ? 'd.draw'
+            : c.result === 'fW' ? 'f.win+' + c.margin : c.result === 'fL' ? 'f.loss−' + c.margin : o + '…';
         }
         h += '<td class="' + (c && c.result === 'W' ? 'w' : '') + '">' + txt + '</td>';
       });
@@ -2020,9 +2466,9 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       var s = st.t.sections[si], out;
       var drawn = PM.roundsDrawn(s), complete = PM.roundsComplete(s), r = st.printRound;
       var notYet = '<h1>' + esc(s.name) + '</h1><p>' + (drawn ? 'Round ' + r + ' has not been drawn in this division yet (it is on round ' + drawn + ').' : 'No draw yet.') + '</p>';
-      if (st.printWhat === 'pairings') {
+      if (st.printWhat === 'pairings' || st.printWhat === 'slips') {
         if (!r) r = Math.max(1, Math.min(drawn, complete + 1));
-        out = drawn && r <= drawn ? pairingsPrint(s, si, r) : notYet;
+        out = !drawn || r > drawn ? notYet : st.printWhat === 'slips' ? slipsPrint(s, si, r) : pairingsPrint(s, si, r);
       } else if (st.printWhat === 'schedule') out = schedulePrint(s);
       else if (st.printWhat === 'results') out = resultsPrint(s, si, r || complete || drawn || 1);
       else if (st.printWhat === 'scorecards') out = scorecardsPrint(s, si);
@@ -2033,18 +2479,26 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     }).join('');
   }
   function renderPrint(main) {
-    var what = [['pairings', 'Pairings'], ['results', 'Results for a round'], ['standings', 'Standings'], ['prizes', 'Prize list'],
+    var what = [['pairings', 'Pairings'], ['slips', 'Result slips (one per table)'], ['results', 'Results for a round'], ['standings', 'Standings'], ['prizes', 'Prize list'],
       ['scorecards', 'Scorecards (one per player)'], ['wallchart', 'Wall chart'], ['schedule', 'Full schedule (round robin)']];
     var maxR = st.t.sections.reduce(function (m, x) { return Math.max(m, PM.roundsDrawn(x)); }, 0);
     if (st.printRound > maxR) st.printRound = null;
-    var roundPick = '', latest = { pairings: 'Current round', results: 'Latest finished round', standings: 'Latest (after the last finished round)' }[st.printWhat];
+    var roundPick = '', latest = { pairings: 'Current round', slips: 'Current round', results: 'Latest finished round', standings: 'Latest (after the last finished round)' }[st.printWhat];
     if (latest) {
       roundPick = '<option value="">' + latest + '</option>';
       for (var i = 1; i <= maxR; i++) roundPick += '<option value="' + i + '"' + (i === st.printRound ? ' selected' : '') + '>' + (st.printWhat === 'standings' ? 'After round ' : 'Round ') + i + '</option>';
       roundPick = '<select id="pr-round">' + roundPick + '</select>';
       if (st.printWhat === 'results') roundPick += '<label><input type="checkbox" id="pr-stand"' + (st.printWithStandings ? ' checked' : '') + '> include standings after that round</label>';
     }
-    if (st.printWhat === 'prizes') roundPick = '<label>Places with prizes in Division ' + esc(sec().name) + '</label><input id="pr-places" type="number" min="1" max="50" style="width:60px" value="' + (sec().prizes || 3) + '">';
+    if (st.printWhat === 'prizes') {
+      var ex = sec().prizeExtras || {};
+      roundPick = '<label>Places with prizes in Division ' + esc(sec().name) + '</label><input id="pr-places" type="number" min="1" max="50" style="width:60px" value="' + (sec().prizes || 3) + '">' +
+        '<label><input type="checkbox" data-extra="tuff"' + (ex.tuff ? ' checked' : '') + '> Tuff luck</label>' +
+        '<label><input type="checkbox" data-extra="lucky"' + (ex.lucky ? ' checked' : '') + '> Lucky stiff</label>' +
+        '<label><input type="checkbox" data-extra="average"' + (ex.average ? ' checked' : '') + '> Highest average</label>' +
+        '<label title="For a day prize: rank players on these rounds only">Best over rounds</label><input id="pr-from" type="number" min="1" style="width:52px" value="' + (ex.from || '') + '">' +
+        '<label>to</label><input id="pr-to" type="number" min="1" style="width:52px" value="' + (ex.to || '') + '">';
+    }
     main.innerHTML = '<div class="card"><h2>Print</h2><div class="row"><select id="pr-what">' +
       what.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === st.printWhat ? ' selected' : '') + '>' + w[1] + '</option>'; }).join('') +
       '</select><select id="pr-secs"><option value="all"' + (st.printSecs === 'all' ? ' selected' : '') + '>All divisions (one per page)</option><option value="one"' +
@@ -2056,6 +2510,12 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     $('pr-what').onchange = function () { st.printWhat = this.value; render(); };
     $('pr-secs').onchange = function () { st.printSecs = this.value; render(); };
     if ($('pr-round')) $('pr-round').onchange = function () { st.printRound = +this.value || null; render(); };
+    $('main').querySelectorAll('[data-extra]').forEach(function (cb) {
+      cb.onchange = function () { var ex = sec().prizeExtras = sec().prizeExtras || {}; if (this.checked) ex[this.dataset.extra] = true; else delete ex[this.dataset.extra]; changed(); };
+    });
+    ['from', 'to'].forEach(function (k) {
+      if ($('pr-' + k)) $('pr-' + k).onchange = function () { var ex = sec().prizeExtras = sec().prizeExtras || {}, n = parseInt(this.value, 10); if (n > 0) ex[k] = n; else delete ex[k]; changed(); };
+    });
     if ($('pr-places')) $('pr-places').onchange = function () { sec().prizes = Math.max(1, Math.min(50, parseInt(this.value, 10) || 3)); changed(); };
     if ($('pr-stand')) $('pr-stand').onchange = function () { st.printWithStandings = this.checked; render(); };
     $('pr-go').onclick = function () {
@@ -2072,7 +2532,63 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   }
 
   // ---------- top bar ----------
+  // ---------- practice mode (dry run) ----------
+  function startPractice(fresh) {
+    practice = true;
+    if (fresh || !load()) { st.t = PM.sampleTournament(); st.sec = 0; st.round = 1; st.tab = 'players'; }
+    st.t.title = st.t.title || 'Practice tournament';
+    undoLog.reset(st.t); document.body.classList.add('practicing'); changed();
+    flash('Practice started: try the Players, Rounds & scores, Standings and Print tabs');
+  }
+  function leavePractice() {
+    practice = false; document.body.classList.remove('practicing');
+    if (!load()) freshTournament();
+    undoLog.reset(st.t); render(); renderUndo();
+    flash('Back to your real tournament');
+  }
+
+  // ---------- projector scoreboard (a second window, read-only) ----------
+  // Reads the autosave the main window writes, so it follows every score as it is entered. It never saves.
+  function scoreboard(key) {
+    document.title = 'PairMaster – Standings';
+    document.body.className = 'board';
+    document.body.innerHTML = '<div id="board"></div><button id="board-full" class="small">Full screen</button>';
+    var page = 0, secIdx = 0, last = '';
+    $('board-full').onclick = function () { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); this.hidden = true; };
+    function read() {
+      try { var d = JSON.parse(localStorage.getItem(key)); return d && PM.validTournament(d.t) ? d.t : null; } catch (e) { return null; }
+    }
+    function draw(advance) {
+      var t = read(), box = $('board');
+      if (!t) { box.innerHTML = '<h1>Waiting for PairMaster…</h1>'; return; }
+      var secs = t.sections.filter(function (x) { return x.players.length; });
+      if (!secs.length) { box.innerHTML = '<h1>' + esc(t.title) + '</h1><p>No players yet.</p>'; return; }
+      var perPage = Math.max(5, Math.floor((window.innerHeight - 170) / 46));
+      if (advance) {
+        page++;
+        var pages = Math.ceil(secs[secIdx % secs.length].players.length / perPage);
+        if (page >= pages) { page = 0; secIdx = (secIdx + 1) % secs.length; }
+      }
+      var s = secs[secIdx % secs.length], done = PM.roundsComplete(s), key = t.rankMethod === 'A' ? 'total' : 'spread';
+      var rows = PM.standings(t, s, done), pages2 = Math.ceil(rows.length / perPage);
+      if (page >= pages2) page = 0;
+      var h = '<h1>' + esc(t.title) + ' – Division ' + esc(s.name) + '</h1><h2>Standings after round ' + done +
+        (pages2 > 1 ? ' · page ' + (page + 1) + ' of ' + pages2 : '') + ' · updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</h2>' +
+        '<table><thead><tr><th class="num">#</th><th>Player</th><th class="num">Wins</th><th class="num">' + (key === 'total' ? 'Total' : 'Spread') + '</th></tr></thead><tbody>';
+      rows.slice(page * perPage, (page + 1) * perPage).forEach(function (x) {
+        h += '<tr><td class="num">' + x.rank + '</td><td>' + esc(PM.displayName(s.players[x.idx].name)) + '</td><td class="num">' + fmtWins(x.wins) +
+          '</td><td class="num">' + (key === 'total' ? x.total : fmtSigned(x.spread)) + '</td></tr>';
+      });
+      box.innerHTML = h + '</tbody></table>';
+    }
+    draw(false);
+    window.addEventListener('storage', function (e) { if (e.key === key && e.newValue !== last) { last = e.newValue; draw(false); } });
+    setInterval(function () { draw(true); }, 15000); // next page or division every 15 s (also catches missed updates)
+    window.addEventListener('resize', function () { draw(false); });
+  }
+
   function init() {
+    if (/^#scoreboard/.test(location.hash)) { scoreboard(location.hash === '#scoreboard-practice' ? STORE_KEY + '.practice' : STORE_KEY); return; }
     if (!load()) { freshTournament(); save(); }
     try { render(); } catch (e) {
       try { localStorage.setItem(STORE_KEY + '.damaged', localStorage.getItem(STORE_KEY)); } catch (e2) { /* ignore */ }
@@ -2083,12 +2599,21 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       b.onclick = function () { st.tab = b.dataset.tab; if (st.tab === 'round') st.round = defaultRound(sec()); changed(); };
     });
     $('btn-new').onclick = function () {
-      if (!confirm('Start a new tournament? Save a .TOU file of the current one first if you need it.')) return;
+      if (!confirm(practice ? 'Start the practice event again?' : 'Start a new tournament? Save the current one first if you need it (Undo can also bring it back).')) return;
+      if (practice) { startPractice(true); return; }
       freshTournament(); changed();
     };
-    $('btn-save').onclick = saveTou;
+    $('btn-save').onclick = function () {
+      if (practice) { alert('Saving is turned off in practice, so nothing can be mixed up with a real tournament. Click "Leave practice" first.'); return; }
+      saveTou();
+    };
+    $('btn-practice').onclick = function () {
+      if (practice) { leavePractice(); return; }
+      if (confirm('Open the practice tournament? It is a made-up event for trying things out; your real tournament is kept safe and comes back when you leave practice.')) startPractice(false);
+    };
     $('btn-undo').onclick = undo;
     document.addEventListener('keydown', function (e) {
+      if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') && $('r-find')) { e.preventDefault(); $('r-find').focus(); return; }
       // Ctrl+Z / Cmd+Z undoes a PairMaster change, except while typing in a box (where it undoes the typing).
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'z' || e.key === 'Z') &&
           !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); undo(); }
@@ -2098,13 +2623,16 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     $('btn-help').onclick = function () {
       this.href = location.protocol === 'file:' && navigator.onLine ? ONLINE_GUIDE : 'guide.html';
     };
-    $('btn-open').onclick = openTou;
+    $('btn-open').onclick = function () {
+      if (practice) { alert('Opening files is turned off in practice. Click "Leave practice" first.'); return; }
+      openTou();
+    };
     $('btn-folder').onclick = chooseFolder;
     if (canFolder) idb('get').then(function (h) { folder = h; renderFolder(); });
     $('file-input').onchange = function () {
       var f = this.files[0]; if (!f) return;
       var reader = new FileReader();
-      reader.onload = function () { openTouText(f.name, reader.result); };
+      reader.onload = function () { openFileText(f.name, reader.result); };
       reader.readAsText(f);
     };
     window.addEventListener('beforeprint', function () { if (!$('print-area').innerHTML) $('print-area').innerHTML = buildPrint(); });
