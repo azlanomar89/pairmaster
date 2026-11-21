@@ -50,6 +50,8 @@ up to 500 players and 60-player, 59-round events.
 
 ## Versions
 
+- **1.3.1**: the projector view shows the playoff final: the score while it is played, then the result and who wins
+  the title, under the title on every page.
 - **1.3**: share images for WhatsApp/Telegram, made for phones, with privacy options and a text version (all offline);
   optional ratings (unrated players fully supported) with sort-by-rating and a biggest-upset prize; optional
   best-of-3/5 playoff final; Gibsonization option for missing players who may return; clearer save-folder button;
