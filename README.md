@@ -4,6 +4,10 @@ Pairings, results and standings for Scrabble tournaments, in a single file that 
 your web browser. PairMaster reads and writes AuPair 6.16 `.TOU` files exactly as AuPair does,
 so it fits into the existing ratings workflow.
 
+**▶ Try it now in your browser: https://azlanomar89.github.io/pairmaster/**
+
+**📖 User guide: https://azlanomar89.github.io/pairmaster/guide.html**
+
 ## Download and run
 
 1. Download the latest `PairMaster-x.y.zip` from the [Releases](../../releases/latest) page and unzip it,
@@ -12,7 +16,8 @@ so it fits into the existing ratings workflow.
 3. Use **Google Chrome** or **Microsoft Edge** for the best experience (they let PairMaster save
    into a folder you choose). Safari and Firefox work too, but saved files go to Downloads.
 
-Read the [user guide](guide.html) (also linked from **Help** inside the app).
+Read the [user guide](https://azlanomar89.github.io/pairmaster/guide.html) (also linked from **Help** inside the app,
+and included in the download as `guide.html`).
 
 ## Features
 
