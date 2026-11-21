@@ -32,6 +32,8 @@ and included in the download as `guide.html`).
 - **Event file** (`.pairmaster`) saved with every `.TOU`, keeping schools, classes and settings; automatic backup after each round.
 - **Forfeits** as in WESPA Rule 2.3.6 (win by 100, unrated), a spread cap and a bye-spread setting.
 - **Fast score entry:** jump to a game by table number or name, a typo guard, and a list of who is missing.
+- **Share images** of standings, results and pairings for WhatsApp and Telegram, made for phones; works offline.
+- **Optional ratings** (unrated players welcome), a **playoff final**, and a biggest-upset prize.
 - **Several divisions**, with table numbers running on from one division to the next.
 - **Standings** by wins then spread (or total score), at any earlier round.
 - **Printouts:** pairings, result slips, results and standings for any round, prize list (with class, tuff luck, lucky stiff, average and day prizes), player scorecards, wall chart, round-robin schedule.
@@ -48,6 +50,10 @@ up to 500 players and 60-player, 59-round events.
 
 ## Versions
 
+- **1.3**: share images for WhatsApp/Telegram, made for phones, with privacy options and a text version (all offline);
+  optional ratings (unrated players fully supported) with sort-by-rating and a biggest-upset prize; optional
+  best-of-3/5 playoff final; Gibsonization option for missing players who may return; clearer save-folder button;
+  the cursor now stays in place when a screen updates.
 - **1.2.1**: Gibsonization fix: when too few players are out of the prizes, Gibsonized players now play each other
   (as TSH does) instead of meeting a player still racing for a prize; in an odd field the next Gibsonized player
   now gets the highest-ranked non-contender.

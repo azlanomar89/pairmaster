@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-A7rjE3/qtj7HYE6iTh8SAZiEzWvwJieAzeK7xQDGlI4='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-HZ2fazCJeN3LhOn7PyYOUc1qlSXpJgABxl+s8h5PgCg='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>PairMaster</title>
 <style>
 :root {
@@ -117,12 +117,16 @@ body.board td, body.board th { padding: 6px 14px; font-size: 30px; }
 body.board #board-full { position: fixed; right: 16px; bottom: 16px; font-size: 14px; }
 .banner.practice { background: #f0a020; color: #1d1d1f; }
 body.practicing .topbar { box-shadow: inset 0 -4px 0 #f0a020; }
+.share-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.share-grid figure { margin: 0; }
+.share-grid img { width: 100%; height: auto; border: 1px solid #ccd5d0; border-radius: 6px; display: block; }
+.share-grid figcaption { font-size: 11px; color: #555; margin-top: 4px; word-break: break-all; }
 
 </style>
 </head>
 <body>
 <header class="topbar no-print">
-  <div class="brand">PairMaster <span class="version">1.2.1</span></div>
+  <div class="brand">PairMaster <span class="version">1.3</span></div>
   <div class="event" id="event-label"></div>
   <div class="spacer"></div>
   <span class="saved" id="saved-label"></span>
@@ -130,7 +134,7 @@ body.practicing .topbar { box-shadow: inset 0 -4px 0 #f0a020; }
   <a class="help" id="btn-help" href="guide.html" target="_blank" rel="noopener" title="User guide">Help</a>
   <button id="btn-undo" title="Undo the last change (Ctrl+Z or Cmd+Z)" disabled>↶ Undo</button>
   <button id="btn-new">New</button>
-  <button id="btn-folder" class="small" hidden title="Folder where .TOU files are saved"></button>
+  <button id="btn-folder" class="small" hidden></button>
   <button id="btn-open" title="Open a PairMaster event file (.pairmaster) or an AuPair .TOU file">Open</button>
   <button id="btn-save" class="primary" title="Saves the .TOU file (for AuPair and ratings) and the .pairmaster event file (everything else)">Save</button>
   <input type="file" id="file-input" accept=".pairmaster,.tou,.TOU,text/plain" hidden>
@@ -359,6 +363,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       pl.games.forEach(function (g) { if (g) g.opp = map[g.opp]; });
     });
     sec.players = players;
+    if (sec.playoff) { sec.playoff.a = map[sec.playoff.a]; sec.playoff.b = map[sec.playoff.b]; } // same two players
   };
 
   // Structural check for tournaments loaded from autosave: every game must point at a real
@@ -377,6 +382,15 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (s.gibsonMode !== undefined && ['off', 'first', 'decided'].indexOf(s.gibsonMode) < 0) return false;
       if (s.avoidSameSchool !== undefined && typeof s.avoidSameSchool !== 'boolean') return false;
       if (s.useClasses !== undefined && typeof s.useClasses !== 'boolean') return false;
+      if (s.useRatings !== undefined && typeof s.useRatings !== 'boolean') return false;
+      var po = s.playoff, nP = s.players.length;
+      var idxOK = function (v) { return Number.isInteger(v) && v >= 0 && v < nP; };
+      if (po !== undefined && (!po || typeof po !== 'object' || !idxOK(po.a) || !idxOK(po.b) || po.a === po.b ||
+          (po.bestOf !== 3 && po.bestOf !== 5) || !Array.isArray(po.games) || po.games.length > po.bestOf ||
+          !po.games.every(function (g) {
+            return g === null || (g && typeof g === 'object' && Number.isInteger(g.aScore) && Number.isInteger(g.bScore) && typeof g.aFirst === 'boolean');
+          }))) return false;
+      if (s.gibsonMissingReturn !== undefined && typeof s.gibsonMissingReturn !== 'boolean') return false;
       if (!count(s.schoolFrom) || !count(s.schoolTo)) return false;
       var ex = s.prizeExtras;
       if (ex !== undefined && (!ex || typeof ex !== 'object' || !count(ex.from) || !count(ex.to) ||
@@ -388,6 +402,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         if (!pl || typeof pl.name !== 'string' || !Array.isArray(pl.games)) return false;
         if (pl.school !== undefined && typeof pl.school !== 'string') return false;
         if (pl.klass !== undefined && typeof pl.klass !== 'string') return false;
+        if (pl.rating !== undefined && pl.rating !== null && !Number.isInteger(pl.rating)) return false;
         return pl.games.every(function (g, r) {
           if (g === null || g === undefined) return true; // a hole (saved as null)
           if (typeof g !== 'object' || !Number.isInteger(g.opp) || g.opp < 0 || g.opp >= n ||
@@ -434,6 +449,10 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     return '';
   };
 
+  PM.scoreCheckValue = function (score) {
+    return score && score < 100 ? 'Is ' + score + ' right? Scores under 100 are rare: check for a missing digit.' : '';
+  };
+
   // Does the game a v b (at table) match what the director typed? A table number matches exactly;
   // text matches the start of any word of either player's name.
   PM.gameMatches = function (sec, a, b, table, q) {
@@ -458,6 +477,42 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       }
       return c;
     });
+  };
+
+  // Ratings are optional, always: a blank, "unrated" or odd-looking rating just means the player is unrated.
+  PM.ratingOf = function (pl) { return Number.isInteger(pl && pl.rating) && pl.rating > 0 ? pl.rating : null; };
+
+  // One pasted line: "Name, rest..." split on commas or tabs (when any extra columns are switched on).
+  // With ratings on, the first 3-4 digit number after the name is the rating; other fields fill school, then class.
+  PM.parsePlayerLine = function (line, o) {
+    o = o || {};
+    var out = { name: '', rating: null, school: '', klass: '' };
+    if (!o.ratings && !o.schools && !o.classes) { out.name = String(line).replace(/\s+/g, ' ').trim(); return out; }
+    var parts = String(line).split(/[\t,]/).map(function (x) { return x.replace(/\s+/g, ' ').trim(); });
+    out.name = parts.shift() || '';
+    var texts = [];
+    parts.forEach(function (x) {
+      if (o.ratings && out.rating === null && /^\d{3,4}$/.test(x) && +x > 0) out.rating = +x;
+      else if (o.ratings && /^(-?\d+(\.\d+)?|unrated|nr|n\/a|-)$/i.test(x)) return; // a rating that doesn't fit: unrated
+      else if (x) texts.push(x);
+    });
+    if (o.schools) out.school = texts.shift() || '';
+    if (o.classes) out.klass = texts.shift() || '';
+    return out;
+  };
+
+  // Sort by rating (only when the director asks): rated players first, highest first; unrated players keep their
+  // order, after the rated ones. Ties keep the entered order.
+  PM.sortByRating = function (sec) {
+    var order = sec.players.map(function (pl, i) { return i; });
+    order.sort(function (a, b) {
+      var ra = PM.ratingOf(sec.players[a]), rb = PM.ratingOf(sec.players[b]);
+      if (ra === null && rb === null) return a - b;
+      if (ra === null) return 1;
+      if (rb === null) return -1;
+      return (rb - ra) || (a - b);
+    });
+    PM.reorderPlayers(sec, order);
   };
 
   PM.hasGames = function (sec) { return PM.roundsDrawn(sec) > 0; };
@@ -1066,7 +1121,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     { id: 'decided', label: 'Anyone whose prize place is decided' }
   ];
 
-  // cfg: { totalRounds, prizes, mode: 'off'|'first'|'decided', players?: [idx] (ticked; default all) }
+  // cfg: { totalRounds, prizes, mode: 'off'|'first'|'decided', players?: [idx] (ticked; default all),
+  //        missingMayReturn?: true (count missing players as able to come back and win) }
   // Returns { remaining, gibsons: [{idx, place, selected, opp, bye}], outOfPrizes: [idx] } in rank order.
   // In an odd field the top ticked Gibsonized player takes the bye (bye: true). The others each meet the
   // highest-ranked player out of the prizes; if there aren't enough of those, the Gibsonized players play
@@ -1082,7 +1138,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var prizes = Math.max(1, parseInt(cfg.prizes, 10) || 1);
     var rows = PM.standings(t, sec, standRound);
     var missing = function (p) { return !!sec.players[p].missing; };
-    var maxWins = function (row) { return row.wins + (missing(row.idx) ? 0 : R); };
+    // A missing player is assumed to win no more games, unless the director says missing players may return.
+    var maxWins = function (row) { return row.wins + (missing(row.idx) && !cfg.missingMayReturn ? 0 : R); };
 
     function placeDecided(k) {
       var x = rows[k];
@@ -1366,6 +1423,18 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       out.places.push({ place: shared ? prev.place : i + 1, idx: r.idx, wins: r.wins, value: r[key], tied: !!shared });
       if (shared) prev.tied = true;
     });
+    // A finished playoff final decides 1st and 2nd (the Swiss standings themselves are not changed).
+    var ps = PM.playoffStatus ? PM.playoffStatus(sec) : null;
+    if (ps && PM.playoffStale(t, sec)) { out.playoffStale = true; ps = null; }
+    if (ps && ps.done && out.places.length >= 2) {
+      var top = {}; out.places.forEach(function (x) { top[x.idx] = x; });
+      if (top[ps.winner] && top[ps.loser]) {
+        var w = top[ps.winner], l = top[ps.loser];
+        out.places = [w, l].concat(out.places.filter(function (x) { return x !== w && x !== l; }));
+        w.place = 1; l.place = 2; w.tied = l.tied = false; w.playoff = l.playoff = true;
+        out.playoff = ps;
+      }
+    }
     // ...and anyone below the cut who is tied with the last place listed.
     var last = out.places[out.places.length - 1];
     rows.slice(places).forEach(function (r) {
@@ -1441,6 +1510,21 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       else if (avg === out.average.avg) out.average.players.push(p);
     });
 
+    // Biggest upset: the largest rating gap a lower-rated player overcame. Only games between two rated players.
+    var rated = sec.players.filter(function (pl) { return PM.ratingOf(pl) !== null; }).length;
+    out.upset = { diff: 0, games: [], enoughRatings: rated >= 2 };
+    for (var r3 = 1; r3 <= upTo; r3++) {
+      sec.players.forEach(function (pl, p) {
+        var g = PM.game(sec, p, r3);
+        if (!g || g.opp === p || !PM.isPlayed(sec, p, r3)) return;
+        var os = PM.game(sec, g.opp, r3).score, rp = PM.ratingOf(pl), ro = PM.ratingOf(sec.players[g.opp]);
+        if (g.score <= os || rp === null || ro === null || rp >= ro) return;
+        var item = { round: r3, idx: p, opp: g.opp, rating: rp, oppRating: ro, score: g.score, oppScore: os, diff: ro - rp };
+        if (ro - rp > out.upset.diff) { out.upset.diff = ro - rp; out.upset.games = [item]; }
+        else if (ro - rp === out.upset.diff) out.upset.games.push(item);
+      });
+    }
+
     if (opts.from && opts.to && opts.to >= opts.from) {
       var to = Math.min(opts.to, upTo);
       out.roundsBest = { from: opts.from, to: to, places: to >= opts.from ? topWithTies(PM.standings(t, sec, to, opts.from), out.key, places) : [] };
@@ -1459,7 +1543,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   var FORMAT = 'PairMaster event', FORMAT_VERSION = 1;
   var SKIP = { lastSavedName: true, lastBackupRounds: true };
 
-  PM.APP_VERSION = '1.2.1'; // filled in by build.py
+  PM.APP_VERSION = '1.3'; // filled in by build.py
 
   PM.writeEvent = function (t) {
     var copy = JSON.parse(JSON.stringify(t, function (k, v) { return SKIP[k] ? undefined : v; }));
@@ -1527,6 +1611,150 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   PM.backupFileNames = function (name, round) {
     var base = (name || 'TOURNEY') + '-R' + (round < 10 ? '0' : '') + round;
     return [base + '.TOU', base + '.pairmaster'];
+  };
+})(PM);
+
+// PairMaster — optional playoff final: after the Swiss rounds, 1st v 2nd play a best-of-3 or best-of-5 match
+// (as at the WESPA Summit Cup). The playoff is kept in the event file only; the .TOU and the Swiss standings are
+// not changed. Rules: a win counts 1 and a tie ½; the first to more than half the games wins. If the match is still
+// level after every game, the playoff spread decides, and if that is level too, the player who led the Swiss.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+
+  // Section field: playoff = { a, b, bestOf: 3|5, games: [{ aScore, bScore, aFirst }] }; a is the Swiss leader.
+  PM.startPlayoff = function (t, sec, bestOf) {
+    var rows = PM.standings(t, sec);
+    if (rows.length < 2) throw new Error('A playoff needs at least two players.');
+    sec.playoff = { a: rows[0].idx, b: rows[1].idx, bestOf: bestOf === 5 ? 5 : 3, games: [] };
+    return sec.playoff;
+  };
+
+  PM.removePlayoff = function (sec) { delete sec.playoff; };
+
+  // Enter (or clear, with 0/0) game i's scores; a starts game 1 and starts alternate after that.
+  PM.setPlayoffGame = function (sec, i, aScore, bScore) {
+    var po = sec.playoff;
+    if (!po || i < 0 || i >= po.bestOf) throw new Error('No such playoff game.');
+    var clamp = function (v) { return Math.max(0, Math.min(999, Math.round(Number(v) || 0))); };
+    po.games[i] = { aScore: clamp(aScore), bScore: clamp(bScore), aFirst: po.games[i] ? po.games[i].aFirst : i % 2 === 0 };
+  };
+
+  // A playoff only counts while its two finalists are still 1st and 2nd (in either order) in the standings;
+  // if later rounds or a score correction changed that, it is stale and the director should start it again.
+  PM.playoffStale = function (t, sec) {
+    var po = sec.playoff;
+    if (!po) return false;
+    var rows = PM.standings(t, sec), top = rows.slice(0, 2).map(function (r) { return r.idx; });
+    return !(top.indexOf(po.a) >= 0 && top.indexOf(po.b) >= 0);
+  };
+
+  PM.playoffStatus = function (sec) {
+    var po = sec.playoff;
+    if (!po) return null;
+    var st = { a: po.a, b: po.b, bestOf: po.bestOf, target: Math.floor(po.bestOf / 2) + 1, winsA: 0, winsB: 0,
+      spreadA: 0, played: 0, done: false, winner: null, loser: null, reason: '', games: [] };
+    for (var i = 0; i < po.bestOf; i++) {
+      var g = po.games[i];
+      var played = !!g && g.aScore >= PM.MIN_SCORE && g.bScore >= PM.MIN_SCORE;
+      st.games.push({ n: i + 1, aScore: g ? g.aScore : 0, bScore: g ? g.bScore : 0, aFirst: g ? g.aFirst : i % 2 === 0, played: played, counted: false });
+      if (!played || st.done) continue;
+      st.games[i].counted = true;
+      st.played++;
+      if (g.aScore > g.bScore) st.winsA++; else if (g.bScore > g.aScore) st.winsB++; else { st.winsA += 0.5; st.winsB += 0.5; }
+      st.spreadA += g.aScore - g.bScore;
+      if (st.winsA > po.bestOf / 2) { st.done = true; st.winner = po.a; st.reason = 'wins'; }
+      else if (st.winsB > po.bestOf / 2) { st.done = true; st.winner = po.b; st.reason = 'wins'; }
+    }
+    if (!st.done && st.played === po.bestOf) {
+      st.done = true;
+      if (st.spreadA !== 0) { st.winner = st.spreadA > 0 ? po.a : po.b; st.reason = 'spread'; }
+      else { st.winner = po.a; st.reason = 'seed'; }
+    }
+    if (st.done) st.loser = st.winner === po.a ? po.b : po.a;
+    return st;
+  };
+})(PM);
+
+// PairMaster — share images: what goes on each picture (standings, round results, next pairings), split into
+// balanced pages of at most 15 rows so they stay readable on a phone. Drawing happens in ui.js; this file only
+// decides the content, so it can be tested. Fully offline: nothing is sent anywhere.
+var PM = (typeof PM !== 'undefined') ? PM : {};
+
+(function (PM) {
+  'use strict';
+  var PER_PAGE = 15, PER_PAGE_TWO_LINES = 11; // rows with a school under the name need more height
+
+  // Privacy: first name and the initial of the next word ("Ahmad Faiz bin Abdullah" -> "Ahmad F.").
+  PM.privateName = function (name) {
+    var w = PM.displayName(name).split(' ').filter(Boolean);
+    return w.length < 2 ? w.join('') : w[0] + ' ' + w[1].charAt(0).toUpperCase() + '.';
+  };
+
+  function paginate(kind, heading, rows, base) {
+    var cap = rows.some(function (r) { return r.note; }) ? PER_PAGE_TWO_LINES : PER_PAGE;
+    var pages = Math.max(1, Math.ceil(rows.length / cap)), per = Math.ceil(rows.length / pages), out = [];
+    for (var i = 0; i < pages; i++) {
+      out.push({ kind: kind, title: base.title, heading: heading, stamp: base.stamp, page: i + 1, pages: pages,
+        rows: rows.slice(i * per, (i + 1) * per), key: base.key, footnote: base.footnote || '' });
+    }
+    return out;
+  }
+
+  // opts: { initials, hideSchools, when (text such as "10:30") }
+  PM.sharePages = function (t, si, opts) {
+    opts = opts || {};
+    var sec = t.sections[si], name = function (p) { return opts.initials ? PM.privateName(sec.players[p].name) : PM.displayName(sec.players[p].name); };
+    var note = function (p) { return !opts.hideSchools && sec.avoidSameSchool === true && sec.players[p].school ? sec.players[p].school : ''; };
+    var done = PM.roundsComplete(sec), drawn = PM.roundsDrawn(sec), key = t.rankMethod === 'A' ? 'total' : 'spread';
+    var base = { title: t.title, stamp: 'Made by PairMaster' + (opts.when ? ' at ' + opts.when : '') + (t.date ? ' · ' + t.date : ''), key: key };
+    var div = 'Division ' + sec.name + ' – ', pages = [];
+    if (done >= 1) {
+      var ps = PM.playoffStatus ? PM.playoffStatus(sec) : null, foot = '';
+      if (ps && ps.done && !PM.playoffStale(t, sec)) foot = 'Playoff final: ' + name(ps.winner) + ' beat ' + name(ps.loser) + ' ' +
+        wins(Math.max(ps.winsA, ps.winsB)) + '–' + wins(Math.min(ps.winsA, ps.winsB)) +
+        (ps.reason === 'spread' ? ' (level on games; won on playoff spread)' : ps.reason === 'seed' ? ' (level on games and spread; Swiss leader wins)' : '');
+      pages = pages.concat(paginate('standings', div + 'Standings after round ' + done, PM.standings(t, sec, done).map(function (r) {
+        return { rank: r.rank, name: name(r.idx), note: note(r.idx), wins: r.wins, value: r[key] };
+      }), { title: base.title, stamp: base.stamp, key: key, footnote: foot }));
+      var tables = PM.assignTables(t, done);
+      pages = pages.concat(paginate('results', div + 'Results of round ' + done, PM.roundResults(t, sec, done).map(function (g) {
+        if (g.b === null) return { table: null, a: name(g.a), label: g.nongame === null ? 'needs an opponent' : g.forfeit ? (g.nongame === 'W' ? 'forfeit win' : 'forfeit loss') : { W: 'bye', L: 'not playing', D: 'designated draw' }[g.nongame] };
+        return { table: tables[si + ':' + g.a] || null, a: name(g.a), b: name(g.b), aScore: g.aScore, bScore: g.bScore,
+          winner: g.outcome === 'tie' ? 'tie' : g.winner === g.a ? 'a' : g.winner === g.b ? 'b' : null };
+      }).sort(function (x, y) { return (x.table || 1e9) - (y.table || 1e9); }), base));
+    }
+    if (drawn > done) {
+      var r = done + 1, tb = PM.assignTables(t, r), rows = [];
+      PM.resultSlips(t, si, r).forEach(function (sl) { rows.push({ table: sl.table, a: name(sl.a), b: name(sl.b), aFirst: sl.aFirst, bFirst: sl.bFirst }); });
+      sec.players.forEach(function (pl, p) {
+        var g = PM.game(sec, p, r);
+        if (g && g.opp === p) rows.push({ table: null, a: name(p), label: g.rawOpp ? 'to be paired' : g.margin !== undefined && g.nongame !== 'D' ? (g.nongame === 'W' ? 'wins by forfeit' : 'forfeits') : { W: 'bye', L: 'not playing', D: 'designated draw' }[g.nongame || 'D'] });
+      });
+      pages = pages.concat(paginate('pairings', div + 'Pairings for round ' + r, rows, base));
+    }
+    if (!pages.length) pages = [{ kind: 'empty', title: base.title, heading: div + 'No rounds yet', stamp: base.stamp, page: 1, pages: 1, rows: [], key: key, footnote: '' }];
+    return pages;
+  };
+
+  function signed(v) { return v > 0 ? '+' + v : String(v); }
+  function wins(w) { return String(w).replace('.5', '½'); }
+
+  // The same content as plain text (for screen readers, very old phones, or pasting into a message).
+  PM.shareText = function (t, si, opts) {
+    var out = [], last = '';
+    PM.sharePages(t, si, opts).forEach(function (p) {
+      if (p.heading !== last) { out.push('', p.title, p.heading); last = p.heading; }
+      p.rows.forEach(function (r) {
+        if (p.kind === 'standings') out.push(r.rank + '. ' + r.name + ' – ' + wins(r.wins) + ' wins, ' + (p.key === 'total' ? r.value : signed(r.value)));
+        else if (r.b === undefined) out.push(r.a + ': ' + r.label);
+        else if (p.kind === 'results') out.push((r.table ? 'T' + r.table + ' ' : '') + r.a + ' ' + (r.aScore || '–') + '–' + (r.bScore || '–') + ' ' + r.b);
+        else out.push((r.table ? 'T' + r.table + ' ' : '') + r.a + (r.aFirst ? '*' : '') + ' v ' + r.b + (r.bFirst ? '*' : ''));
+      });
+      if (p.footnote && p.page === p.pages) out.push(p.footnote);
+    });
+    return out.join('\n').trim() + '\n\n* = starts';
   };
 })(PM);
 
@@ -1625,7 +1853,38 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       return false;
     }
   }
-  function changed() { save(); render(); }
+  // Save now, redraw a moment later: by then a Tab or click has moved the cursor to its next box, which is found
+  // again in the redrawn screen, so typing carries on where the director expects (nothing typed is lost).
+  var renderPending = false;
+  function changed() {
+    save();
+    if (renderPending) return;
+    renderPending = true;
+    setTimeout(function () {
+      renderPending = false;
+      var key = focusKey(document.activeElement), sel = selectionOf(document.activeElement);
+      render();
+      restoreFocus(key, sel);
+    }, 0);
+  }
+  function focusKey(el) {
+    if (!el || el === document.body || !el.tagName || !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(el.tagName)) return null;
+    if (el.id) return '#' + el.id;
+    for (var i = 0; i < el.attributes.length; i++) {
+      var at = el.attributes[i];
+      if (/^data-/.test(at.name)) return el.tagName.toLowerCase() + '[' + at.name + '="' + String(at.value).replace(/"/g, '') + '"]';
+    }
+    return null;
+  }
+  function selectionOf(el) { try { return el && typeof el.selectionStart === 'number' ? [el.selectionStart, el.selectionEnd] : null; } catch (e) { return null; } }
+  function restoreFocus(key, sel) {
+    if (!key) return;
+    var el = null;
+    try { el = document.querySelector(key); } catch (e) { return; }
+    if (!el || el.disabled) return;
+    el.focus();
+    if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not a text box */ }
+  }
   function renderUndo() {
     var b = $('btn-undo');
     if (b) b.disabled = !undoLog.canUndo();
@@ -1669,7 +1928,9 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var b = $('btn-folder');
     if (!canFolder) return;
     b.hidden = false;
-    b.textContent = folder ? '📁 ' + folder.name : '📁 Choose save folder';
+    // Says what it is: where Save puts files (it doesn't open anything).
+    b.textContent = folder ? '📁 Save folder: ' + folder.name : '📁 Choose save folder';
+    b.title = folder ? 'Save puts your files in "' + folder.name + '". Click to choose a different folder.' : 'Choose the folder where Save puts your files';
   }
   async function chooseFolder() {
     try {
@@ -1840,7 +2101,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var s = sec(), started = PM.hasGames(s);
     var otherSecs = st.t.sections.map(function (x, i) { return i; }).filter(function (i) { return i !== st.sec; });
     var schools = s.avoidSameSchool === true;
-    var classes = s.useClasses === true;
+    var classes = s.useClasses === true, ratings = s.useRatings === true;
     var noSchool = schools ? s.players.filter(function (pl) { return !String(pl.school || '').trim(); }).length : 0;
     var h = '<div class="card"><h2>Tournament</h2><div class="row">' +
       '<label>Date</label><input type="date" id="t-date" value="' + dmyToIso(st.t.date) + '">' +
@@ -1864,6 +2125,8 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       (st.t.sections.length > 1 && !started ? '<button id="s-del" class="small danger">Delete division</button>' : '') + '</div>' +
       '<div class="row"><label><input type="checkbox" id="s-school"' + (schools ? ' checked' : '') + '> Avoid pairing players from the same school or club</label>' +
       '<label><input type="checkbox" id="s-class"' + (classes ? ' checked' : '') + '> Classes for prizes (e.g. Newcomer, Under 12)</label>' +
+      '<label title="Optional: leave a rating empty for players who are not rated yet"><input type="checkbox" id="s-rating"' + (ratings ? ' checked' : '') + '> Ratings (optional)</label>' +
+      (ratings ? '<button id="s-sort-rating" class="small" title="Rated players first, highest first; unrated players keep their order after them">Sort by rating</button>' : '') +
       (schools ? '<span class="hint">Keep schoolmates apart in rounds</span><input id="s-sch-from" type="number" min="1" style="width:56px" placeholder="1" value="' + (s.schoolFrom || '') + '">' +
         '<span class="hint">to</span><input id="s-sch-to" type="number" min="1" style="width:56px" placeholder="all" value="' + (s.schoolTo || '') + '">' : '') + '</div>' +
       (schools ? '<p class="hint">Type each player\'s school or club. The draw keeps schoolmates apart where it can (rematches are still avoided first).' +
@@ -1871,10 +2134,11 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       '<p class="hint">' + (started
         ? 'The draw has started. Players who leave should be marked <b>Missing</b> – they get a designated loss each round and are left out of the draw.'
         : 'Enter players in rating order, highest first, before the first draw. Add <b>@12</b> to a name to fix that player to table 12, or <b>@R</b> for a fixed table near the front.') + '</p>';
-    h += '<table><thead><tr><th class="num">#</th><th>Name</th>' + (schools ? '<th>School / club</th>' : '') + (classes ? '<th>Class</th>' : '') + '<th>Missing</th><th></th></tr></thead><tbody>';
+    h += '<table><thead><tr><th class="num">#</th><th>Name</th>' + (ratings ? '<th class="num">Rating</th>' : '') + (schools ? '<th>School / club</th>' : '') + (classes ? '<th>Class</th>' : '') + '<th>Missing</th><th></th></tr></thead><tbody>';
     s.players.forEach(function (pl, p) {
       h += '<tr class="' + (pl.missing ? 'missing' : '') + '"><td class="num">' + (p + 1) + '</td>' +
         '<td><input class="name-input" data-name="' + p + '" maxlength="20" value="' + esc(pl.name) + '"></td>' +
+        (ratings ? '<td class="num"><input class="score" data-rating="' + p + '" inputmode="numeric" maxlength="4" placeholder="unrated" value="' + (PM.ratingOf(pl) || '') + '"></td>' : '') +
         (schools ? '<td><input class="school-input" data-school="' + p + '" maxlength="30" size="14" value="' + esc(pl.school || '') + '"></td>' : '') +
         (classes ? '<td><input class="school-input" data-klass="' + p + '" maxlength="20" size="10" value="' + esc(pl.klass || '') + '"></td>' : '') +
         '<td><input type="checkbox" data-miss="' + p + '"' + (pl.missing ? ' checked' : '') + ' title="Dropped out / absent"></td>' +
@@ -1885,12 +2149,14 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         (!started ? '<button class="small danger" data-del="' + p + '">Remove</button>' : '') + '</td></tr>';
     });
     h += '</tbody></table><div class="row" style="margin-top:10px"><input id="p-new" size="28" maxlength="20" placeholder="First name Surname, then Enter">' +
+      (ratings ? '<input id="p-new-rating" class="score" inputmode="numeric" maxlength="4" placeholder="rating">' : '') +
       (schools ? '<input id="p-new-school" size="16" maxlength="30" placeholder="School / club">' : '') +
       (classes ? '<input id="p-new-class" size="10" maxlength="20" placeholder="Class">' : '') +
       '<button id="p-add" class="primary">Add player</button></div>' +
       '<details><summary class="hint">Paste a list of players (one per line)</summary>' +
-      (schools || classes ? '<p class="hint">One player per line, with ' + (schools && classes ? 'the school and then the class' : schools ? 'the school or club' : 'the class') +
-        ' after a comma or a tab: <i>Ann Lee, ' + (schools ? 'Hillview School' : 'Newcomer') + (schools && classes ? ', Newcomer' : '') + '</i>. Columns copied from a spreadsheet can be pasted straight in.</p>' : '') +
+      (schools || classes || ratings ? '<p class="hint">One player per line; after the name, separated by commas or tabs: ' +
+        [ratings ? 'a rating (optional, leave it out if unrated)' : '', schools ? 'the school or club' : '', classes ? 'the class' : ''].filter(Boolean).join(', ') +
+        '. Example: <i>Ann Lee' + (ratings ? ', 1650' : '') + (schools ? ', Hillview School' : '') + (classes ? ', Newcomer' : '') + '</i>. Columns copied from a spreadsheet can be pasted straight in.</p>' : '') +
       '<textarea id="p-bulk" rows="6" cols="40"></textarea><br><button id="p-bulk-add" class="small">Add all</button></details></div>';
     main.innerHTML = h;
 
@@ -1911,7 +2177,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (!confirm('Delete division ' + s.name + ' and its players?')) return;
       st.t.sections.splice(st.sec, 1); st.sec = 0; changed();
     };
-    function addName(n, school, klass) {
+    function addName(n, school, klass, rating) {
       n = n.replace(/\s+/g, ' ').trim();
       school = String(school || '').replace(/\s+/g, ' ').trim().slice(0, 30);
       klass = String(klass || '').replace(/\s+/g, ' ').trim().slice(0, 20);
@@ -1919,23 +2185,38 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       var pl = PM.addPlayer(s, n.slice(0, 20));
       if (school) pl.school = school;
       if (klass) pl.klass = klass;
+      if (Number.isInteger(rating) && rating > 0) pl.rating = rating;
     }
+    function ratingFrom(v) { v = String(v || '').trim(); return /^\d{1,4}$/.test(v) && +v > 0 ? +v : null; }
     $('s-school').onchange = function () { if (this.checked) s.avoidSameSchool = true; else delete s.avoidSameSchool; changed(); };
     $('s-class').onchange = function () { if (this.checked) s.useClasses = true; else delete s.useClasses; changed(); };
     function roundSetting(id, key) { if ($(id)) $(id).onchange = function () { var n = parseInt(this.value, 10); if (n > 0) s[key] = n; else delete s[key]; changed(); }; }
     roundSetting('s-sch-from', 'schoolFrom'); roundSetting('s-sch-to', 'schoolTo');
-    $('p-add').onclick = function () { addName($('p-new').value, schools ? $('p-new-school').value : '', classes ? $('p-new-class').value : ''); changed(); $('p-new').focus(); };
+    $('s-rating').onchange = function () { if (this.checked) s.useRatings = true; else delete s.useRatings; changed(); };
+    if ($('s-sort-rating')) $('s-sort-rating').onclick = function () {
+      if (!s.players.some(function (pl) { return PM.ratingOf(pl) !== null; })) { alert('No player has a rating yet, so the order stays as it is.'); return; }
+      PM.sortByRating(s); changed();
+    };
+    $('p-add').onclick = function () { addName($('p-new').value, schools ? $('p-new-school').value : '', classes ? $('p-new-class').value : '', ratings ? ratingFrom($('p-new-rating').value) : null); changed(); $('p-new').focus(); };
+    if (ratings) $('p-new-rating').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
     if (classes) $('p-new-class').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
     $('p-new').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
     if (schools) $('p-new-school').onkeydown = function (e) { if (e.key === 'Enter') $('p-add').onclick(); };
     $('p-bulk-add').onclick = function () {
       $('p-bulk').value.split(/\n/).forEach(function (line) {
-        if (!schools && !classes) { addName(line); return; }
-        var parts = line.split(/[\t,]/);
-        addName(parts[0], schools ? parts[1] : '', classes ? parts[schools ? 2 : 1] : '');
+        var x = PM.parsePlayerLine(line, { ratings: ratings, schools: schools, classes: classes });
+        addName(x.name, x.school, x.klass, x.rating);
       });
       changed();
     };
+    main.querySelectorAll('[data-rating]').forEach(function (inp) {
+      inp.onchange = function () {
+        var pl = s.players[+this.dataset.rating], r = ratingFrom(this.value);
+        if (this.value.trim() && r === null) alert('A rating is a number such as 1650. Leave it empty for an unrated player.');
+        if (r === null) delete pl.rating; else pl.rating = r;
+        changed();
+      };
+    });
     main.querySelectorAll('[data-klass]').forEach(function (inp) {
       inp.onchange = function () {
         var v = this.value.replace(/\s+/g, ' ').trim().slice(0, 20), pl = s.players[+this.dataset.klass];
@@ -1993,7 +2274,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   }
 
   function gibsonCfg(s) {
-    return { totalRounds: s.totalRounds || 0, prizes: s.prizes || 1, mode: s.gibsonMode || 'off' };
+    return { totalRounds: s.totalRounds || 0, prizes: s.prizes || 1, mode: s.gibsonMode || 'off', missingMayReturn: s.gibsonMissingReturn === true };
   }
   function gibsonUsed(method) { return method === 'australian' || method === 'lagged' || method === 'koth'; }
   function gibsonSelected(s, plan) {
@@ -2009,14 +2290,16 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       (cfg.mode === 'off' ? 'off' : 'on – ' + cfg.prizes + ' prize' + (cfg.prizes === 1 ? '' : 's')) + '</span></summary>' +
       '<div class="row"><label title="The whole event, not the round you are drawing: for a 12-round event enter 12">Total rounds in this division (whole event)</label><input id="g-rounds" type="number" min="1" style="width:70px" value="' + (s.totalRounds || '') + '">' +
       '<label>Prizes</label><input id="g-prizes" type="number" min="1" style="width:70px" value="' + (s.prizes || '') + '"></div>' +
-      '<div class="row"><label>Who is Gibsonized</label><select id="g-mode">' + modeOpts + '</select></div>';
+      '<div class="row"><label>Who is Gibsonized</label><select id="g-mode">' + modeOpts + '</select>' +
+      '<label title="Tick if absent players sometimes come back: they then count as able to win their remaining games"><input type="checkbox" id="g-missing"' +
+      (s.gibsonMissingReturn === true ? ' checked' : '') + '> Missing players may come back</label></div>';
     if (cfg.mode !== 'off') {
       if (!cfg.totalRounds) h += '<p class="pill warn">Enter the total number of rounds in this division for the whole event (for example 12 for a 12-round event), so PairMaster knows how many games are left.</p>';
       else {
         var standRound = draft.method === 'lagged' && nextR >= 3 ? nextR - 2 : nextR - 1;
         var plan = PM.gibsonPlan(st.t, s, nextR, cfg, standRound, draft.freshStart);
         var sel = gibsonSelected(s, plan);
-        plan = PM.gibsonPlan(st.t, s, nextR, { totalRounds: cfg.totalRounds, prizes: cfg.prizes, mode: cfg.mode, players: sel }, standRound, draft.freshStart);
+        plan = PM.gibsonPlan(st.t, s, nextR, { totalRounds: cfg.totalRounds, prizes: cfg.prizes, mode: cfg.mode, missingMayReturn: cfg.missingMayReturn, players: sel }, standRound, draft.freshStart);
 
         if (!plan.remaining) h += '<p class="hint">No rounds left after this one to Gibsonize for.</p>';
         else if (!plan.gibsons.length) h += '<p class="hint">Nobody has clinched yet (' + plan.remaining + ' game' + (plan.remaining === 1 ? '' : 's') + ' left including this one, judged on wins).</p>';
@@ -2150,6 +2433,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     if ($('g-rounds')) $('g-rounds').onchange = function () { s.totalRounds = Math.max(0, parseInt(this.value, 10) || 0); changed(); };
     if ($('g-prizes')) $('g-prizes').onchange = function () { s.prizes = Math.max(1, parseInt(this.value, 10) || 1); changed(); };
     if ($('g-mode')) $('g-mode').onchange = function () { s.gibsonMode = this.value; changed(); };
+    if ($('g-missing')) $('g-missing').onchange = function () { if (this.checked) s.gibsonMissingReturn = true; else delete s.gibsonMissingReturn; changed(); };
     $('main').querySelectorAll('[data-gib]').forEach(function (cb) {
       cb.onchange = function () { draft.gibUntick[st.sec + ':' + this.dataset.gib] = !this.checked; render(); };
     });
@@ -2170,7 +2454,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (gibsonUsed(draft.method) && cfg.mode !== 'off' && cfg.totalRounds) {
         var sr = draft.method === 'lagged' && round >= 3 ? round - 2 : round - 1;
         var all = PM.gibsonPlan(st.t, s, round, cfg, sr, draft.freshStart);
-        gopts = { totalRounds: cfg.totalRounds, prizes: cfg.prizes, mode: cfg.mode, players: gibsonSelected(s, all) };
+        gopts = { totalRounds: cfg.totalRounds, prizes: cfg.prizes, mode: cfg.mode, missingMayReturn: cfg.missingMayReturn, players: gibsonSelected(s, all) };
       }
       PM.draw(st.t, s, draft.method, { firstRound: draft.firstRound, freshStart: draft.freshStart, round: round, gibson: gopts });
       st.round = round; changed();
@@ -2200,7 +2484,10 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       if (v !== '' && !/^\d{1,3}$/.test(v)) { alert('Enter a score from 0 to 999.'); inp.value = was; inp.select(); return false; }
       var msg = PM.scoreCheck(s, r, p, v === '' ? 0 : parseInt(v, 10));
       if (msg && !confirm(msg + '\n\nOK keeps it; Cancel lets you correct it.')) { inp.value = was; inp.focus(); inp.select(); return false; }
+      var wasComplete = PM.isRoundComplete(s, r);
       PM.setScore(s, r, p, v === '' ? 0 : parseInt(v, 10));
+      // When this score finishes (or un-finishes) the round, redraw so the draw panel's counts and button are current.
+      if (PM.isRoundComplete(s, r) !== wasComplete) { changed(); renderBanner(); return true; }
       var g = PM.game(s, p, r);
       var cellA = $('res-' + p) || $('res-' + g.opp);
       if (cellA) cellA.innerHTML = resultText(s, p, r);
@@ -2303,9 +2590,93 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     for (var i = 0; i <= drawn; i++) opts += '<option value="' + i + '"' + (i === upTo ? ' selected' : '') + '>After round ' + i + (i > complete ? ' (incomplete)' : '') + '</option>';
     main.innerHTML = '<div class="card"><div class="row"><h2 style="margin:0">Standings – Division ' + esc(s.name) + '</h2><select id="st-pick">' + opts + '</select>' +
       '<span class="spacer"></span><button id="st-board" class="small" title="Opens large standings in a new window for the hall screen; they update as you enter scores">Projector view ↗</button></div>' +
-      standingsTable(s, upTo) + highLines(s) + '</div>';
+      standingsTable(s, upTo) + highLines(s) + '</div>' + playoffCard(s);
     $('st-pick').onchange = function () { st.standRound = +this.value; render(); };
+    bindPlayoff(s);
     $('st-board').onclick = function () { window.open(location.href.split('#')[0] + (practice ? '#scoreboard-practice' : '#scoreboard'), 'pairmaster-board'); };
+  }
+
+  // ---------- playoff final (optional) ----------
+  function playoffLine(s) {
+    var ps = PM.playoffStatus(s);
+    if (ps && PM.playoffStale(st.t, s)) return '<p class="pill warn">Playoff final: ' + nm(s, ps.a) + ' and ' + nm(s, ps.b) +
+      ' are no longer 1st and 2nd in the standings, so the playoff is not counted. Remove it and start it again.</p>';
+    if (!ps || !ps.played) return '';
+    var score = fmtWins(Math.max(ps.winsA, ps.winsB)) + '–' + fmtWins(Math.min(ps.winsA, ps.winsB));
+    if (ps.done) return '<p><b>Playoff final (best of ' + ps.bestOf + '):</b> ' + nm(s, ps.winner) + ' beat ' + nm(s, ps.loser) + ' ' + score +
+      (ps.reason === 'spread' ? ', level on games, won on playoff spread' : ps.reason === 'seed' ? ', level on games and spread, won as the Swiss leader' : '') + '</p>';
+    var lead = ps.winsA === ps.winsB ? 'level ' + fmtWins(ps.winsA) + '–' + fmtWins(ps.winsB) : nm(s, ps.winsA > ps.winsB ? ps.a : ps.b) + ' leads ' + score;
+    return '<p><b>Playoff final (best of ' + ps.bestOf + '):</b> ' + nm(s, ps.a) + ' v ' + nm(s, ps.b) + ', ' + lead + '</p>';
+  }
+  function playoffStatusHtml(s) { return playoffLine(s) || '<p class="hint">No playoff games entered yet. <span class="starter">*</span> = starts.</p>'; }
+  function playoffCard(s) {
+    var ps = PM.playoffStatus(s);
+    var h = '<div class="card"><h2>Playoff final <span class="hint">(optional)</span></h2>';
+    if (!ps) {
+      return h + '<p class="hint">After the last round, 1st and 2nd can play a short match for the title. It doesn\'t change the standings above or the .TOU file; ' +
+        'the prize list shows the winner as 1st.</p><div class="row"><label>Best of</label><select id="po-best"><option value="3">3 games</option><option value="5">5 games</option></select>' +
+        '<button id="po-start" class="small">Start a playoff between 1st and 2nd</button></div></div>';
+    }
+    h += '<p><b>' + nm(s, ps.a) + '</b> (1st after the rounds) v <b>' + nm(s, ps.b) + '</b> (2nd) · best of ' + ps.bestOf + ', first to ' + ps.target + ' wins (a tie counts ½).</p>';
+    h += '<table><thead><tr><th class="num">Game</th><th>' + nm(s, ps.a) + '</th><th class="num">Score</th><th class="num">Score</th><th>' + nm(s, ps.b) + '</th><th></th></tr></thead><tbody>';
+    ps.games.forEach(function (g, i) {
+      var off = ps.done && !g.counted && !g.played;
+      h += '<tr' + (off ? ' class="missing"' : '') + '><td class="num">' + g.n + '</td><td><span class="starter">' + (g.aFirst ? '*' : '') + '</span></td>' +
+        '<td class="num"><input class="score" inputmode="numeric" data-po-a="' + i + '" value="' + (g.aScore || '') + '"' + (off ? ' disabled' : '') + '></td>' +
+        '<td class="num"><input class="score" inputmode="numeric" data-po-b="' + i + '" value="' + (g.bScore || '') + '"' + (off ? ' disabled' : '') + '></td>' +
+        '<td><span class="starter">' + (g.aFirst ? '' : '*') + '</span></td><td><button class="small" data-po-first="' + i + '" title="Change who starts">⇄</button></td></tr>';
+    });
+    h += '</tbody></table><div id="po-status">' + playoffStatusHtml(s) + '</div>' +
+      '<button id="po-remove" class="small danger">Remove the playoff</button></div>';
+    return h;
+  }
+  function bindPlayoff(s) {
+    if ($('po-start')) $('po-start').onclick = function () {
+      if (PM.roundsComplete(s) < PM.roundsDrawn(s) && !confirm('The last round is not finished. Start the playoff with the current standings anyway?')) return;
+      try { PM.startPlayoff(st.t, s, +$('po-best').value); } catch (e) { alert(e.message); return; }
+      changed();
+    };
+    if ($('po-remove')) $('po-remove').onclick = function () { if (confirm('Remove the playoff and its scores? (Undo can bring it back.)')) { PM.removePlayoff(s); changed(); } };
+    // Scores are saved as they are typed, and the panel is updated in place (not redrawn), so the cursor stays put.
+    var boxes = Array.prototype.slice.call($('main').querySelectorAll('[data-po-a], [data-po-b]'));
+    function refreshPlayoff() {
+      var ps = PM.playoffStatus(s);
+      $('po-status').innerHTML = playoffStatusHtml(s);
+      ps.games.forEach(function (g, i) {
+        var off = ps.done && !g.counted && !g.played;
+        $('main').querySelector('[data-po-a="' + i + '"]').disabled = off;
+        $('main').querySelector('[data-po-b="' + i + '"]').disabled = off;
+      });
+    }
+    function enterPlayoff(inp) {
+      var i = +(inp.dataset.poA !== undefined ? inp.dataset.poA : inp.dataset.poB);
+      var a = $('main').querySelector('[data-po-a="' + i + '"]').value.trim(), b = $('main').querySelector('[data-po-b="' + i + '"]').value.trim();
+      var g = s.playoff.games[i], was = g ? String((inp.dataset.poA !== undefined ? g.aScore : g.bScore) || '') : '';
+      if (inp.value.trim() === was) return true;
+      if ((a && !/^\d{1,3}$/.test(a)) || (b && !/^\d{1,3}$/.test(b))) { alert('Enter a score from 0 to 999.'); inp.value = was; inp.select(); return false; }
+      var msg = inp.value.trim() ? PM.scoreCheckValue(+inp.value.trim()) : '';
+      if (msg && !confirm(msg + '\n\nOK keeps it; Cancel lets you correct it.')) { inp.value = was; inp.select(); return false; }
+      PM.setPlayoffGame(s, i, a || 0, b || 0); save(); refreshPlayoff();
+      return true;
+    }
+    boxes.forEach(function (inp, k) {
+      inp.onchange = function () { enterPlayoff(this); };
+      inp.onkeydown = function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!enterPlayoff(this)) return;
+        var n = boxes[k + 1];
+        while (n && n.disabled) n = boxes[boxes.indexOf(n) + 1];
+        if (n) { n.focus(); n.select(); }
+      };
+    });
+    $('main').querySelectorAll('[data-po-first]').forEach(function (b) {
+      b.onclick = function () {
+        var i = +this.dataset.poFirst, g = s.playoff.games[i];
+        if (!g) { PM.setPlayoffGame(s, i, 0, 0); g = s.playoff.games[i]; }
+        g.aFirst = !g.aFirst; changed();
+      };
+    });
   }
 
   // ---------- printing ----------
@@ -2360,7 +2731,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   }
   function standingsPrint(s, upTo) {
     return '<h1>' + esc(s.name) + ' – Standings after round ' + upTo + (upTo > PM.roundsComplete(s) ? ' (round not finished)' : '') + '</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</h2>' +
-      standingsTable(s, upTo) + highLines(s);
+      standingsTable(s, upTo) + highLines(s) + playoffLine(s);
   }
   function resultsPrint(s, si, r) {
     var head = '<h1>' + esc(s.name) + ' – Results of round ' + r + '</h1><h2>' + esc(st.t.title) + ' · ' + esc(st.t.date) + '</h2>';
@@ -2400,7 +2771,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     var val = function (v) { return pz.key === 'total' ? v + ' total' : fmtSigned(v); };
     h += '<table><thead><tr><th>Prize</th><th>Winner</th><th>Details</th></tr></thead><tbody>';
     pz.places.forEach(function (x) {
-      h += '<tr><td>' + ordinal(x.place) + ' place' + (x.tied ? ' (tied)' : '') + '</td><td><b>' + nm(s, x.idx) + '</b></td><td>' +
+      h += '<tr><td>' + ordinal(x.place) + ' place' + (x.tied ? ' (tied)' : '') + (x.playoff ? ' (playoff)' : '') + '</td><td><b>' + nm(s, x.idx) + '</b></td><td>' +
         fmtWins(x.wins) + ' wins, ' + val(x.value) + '</td></tr>';
     });
     function game(label, rec, what) {
@@ -2425,6 +2796,14 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     if (ex.tuff) many('Tuff luck', pz.tuffLuck.players, 'three closest losses total ' + pz.tuffLuck.total);
     if (ex.lucky) many('Lucky stiff', pz.luckyStiff.players, 'three narrowest wins total ' + pz.luckyStiff.total);
     if (ex.average) many('Highest average', pz.average.players, pz.average.avg + ' a game');
+    if (s.useRatings === true) {
+      if (!pz.upset.enoughRatings) h += '<tr><td>Biggest upset</td><td colspan="2" class="hint">not enough ratings</td></tr>';
+      else if (!pz.upset.games.length) h += '<tr><td>Biggest upset</td><td colspan="2" class="hint">no upsets between rated players yet</td></tr>';
+      else pz.upset.games.forEach(function (g, i) {
+        h += '<tr><td>' + (i ? '' : 'Biggest upset') + '</td><td><b>' + nm(s, g.idx) + '</b> (' + g.rating + ')</td><td>beat ' + nm(s, g.opp) +
+          ' (' + g.oppRating + ') ' + g.score + '–' + g.oppScore + ', round ' + g.round + ': ' + g.diff + ' rating points</td></tr>';
+      });
+    }
     if (pz.roundsBest) pz.roundsBest.places.forEach(function (x, i) {
       h += '<tr><td>' + (i ? '' : 'Best in rounds ' + pz.roundsBest.from + '–' + pz.roundsBest.to) + '</td><td><b>' + nm(s, x.idx) + '</b></td><td>' +
         ordinal(x.place) + (x.tied ? ' (tied)' : '') + ': ' + fmtWins(x.wins) + ' wins, ' + val(x.value) + '</td></tr>';
@@ -2497,8 +2876,140 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
       return (n ? '<div class="page-break"></div>' : '') + out;
     }).join('');
   }
+  // ---------- share images (offline): pictures for WhatsApp, Telegram... ----------
+  // 1080 x 1350 (4:5), large type on a light background, at most 15 rows a page, so they read well on any phone.
+  var SHARE = { w: 1080, h: 1350, top: 250, rowH: 66, ink: '#16241e', muted: '#3e5048', band: '#0f3b2e', gold: '#ffd66b', zebra: '#eef4f1', green: '#1f7357' };
+  var FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+  function fit(ctx, text, max) {
+    text = String(text);
+    if (ctx.measureText(text).width <= max) return text;
+    while (text.length > 1 && ctx.measureText(text + '…').width > max) text = text.slice(0, -1);
+    return text + '…';
+  }
+  function drawSharePage(pg) {
+    var c = document.createElement('canvas'); c.width = SHARE.w; c.height = SHARE.h;
+    var x = c.getContext('2d'), W = SHARE.w;
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, SHARE.h);
+    x.fillStyle = SHARE.band; x.fillRect(0, 0, W, 210);
+    x.fillStyle = '#ffffff'; x.font = '700 44px ' + FONT; x.textBaseline = 'alphabetic';
+    x.fillText(fit(x, pg.title || 'Tournament', W - 220), 56, 82);
+    x.fillStyle = SHARE.gold; x.font = '700 38px ' + FONT; x.fillText(fit(x, pg.heading, W - 112), 56, 150);
+    if (pg.pages > 1) { x.fillStyle = '#ffffff'; x.font = '700 32px ' + FONT; x.textAlign = 'right'; x.fillText(pg.page + '/' + pg.pages, W - 56, 82); x.textAlign = 'left'; }
+    // Row height adapts: fewer rows get bigger type (easier on a phone); a school under the name needs more room.
+    var y0 = SHARE.top, avail = SHARE.h - y0 - 130, twoLine = pg.rows.some(function (r) { return r.note; });
+    var h = Math.max(twoLine ? 62 : 56, Math.min(twoLine ? 120 : 104, Math.floor(avail / Math.max(1, pg.rows.length))));
+    var k = Math.min(1.35, Math.max(0.92, h / (twoLine ? 74 : 66))); // type scale
+    var F = function (weight, px) { return weight + ' ' + Math.round(px * k) + 'px ' + FONT; };
+    x.font = '600 28px ' + FONT; x.fillStyle = SHARE.muted; // column headings: still readable when a phone shrinks the image
+    var cols = pg.kind === 'standings' ? [['#', 104, 'right'], ['Player', 140, 'left'], ['Wins', 800, 'right'], [pg.key === 'total' ? 'Total' : 'Spread', 1024, 'right']]
+      : pg.kind === 'empty' ? [] : [['Table', 56, 'left'], ['', 0, 'left']];
+    cols.forEach(function (cl) { if (cl[0]) { x.textAlign = cl[2]; x.fillText(cl[0], cl[1], y0 - 14); } });
+    x.textAlign = 'left';
+    pg.rows.forEach(function (r, i) {
+      var top = y0 + i * h, mid = top + h / 2 + Math.round(12 * k);
+      if (i % 2 === 0) { x.fillStyle = SHARE.zebra; x.fillRect(40, top, W - 80, h); }
+      x.fillStyle = SHARE.ink;
+      if (pg.kind === 'standings') {
+        x.font = F('700', 34); x.textAlign = 'right'; x.fillText(r.rank, 104, mid);
+        x.textAlign = 'left'; x.font = F('500', 34);
+        if (r.note) {
+          x.fillText(fit(x, r.name, 600), 140, top + Math.round(h * 0.47));
+          x.font = F('400', 25); x.fillStyle = SHARE.muted; x.fillText(fit(x, r.note, 600), 140, top + Math.round(h * 0.84)); x.fillStyle = SHARE.ink;
+        } else x.fillText(fit(x, r.name, 600), 140, mid);
+        x.font = F('700', 34); x.textAlign = 'right';
+        x.fillText(String(r.wins).replace('.5', '½'), 800, mid);
+        x.fillText(pg.key === 'total' ? r.value : (r.value > 0 ? '+' + r.value : r.value), 1024, mid);
+        x.textAlign = 'left';
+        return;
+      }
+      x.font = F('700', 30); x.fillText(r.table ? String(r.table) : '', 64, mid);
+      if (r.b === undefined) { // bye, designated result, forfeit, needs an opponent
+        x.font = F('500', 32); x.fillText(fit(x, r.a, 520), 150, mid);
+        x.font = F('400', 28); x.fillStyle = SHARE.muted; x.fillText(r.label, 690, mid); x.fillStyle = SHARE.ink;
+        return;
+      }
+      var star = function (on) { return on ? '*' : ''; };
+      if (pg.kind === 'results') {
+        x.font = F(r.winner === 'a' ? '700' : '500', 31); x.textAlign = 'right'; x.fillText(fit(x, r.a, 330), 480, mid);
+        x.font = F('700', 31); x.textAlign = 'center'; x.fillStyle = SHARE.green;
+        x.fillText(r.aScore || r.bScore ? (r.aScore || '–') + ' – ' + (r.bScore || '–') : 'to come', 590, mid); x.fillStyle = SHARE.ink;
+        x.font = F(r.winner === 'b' ? '700' : '500', 31); x.textAlign = 'left'; x.fillText(fit(x, r.b, 330), 700, mid);
+      } else {
+        x.font = F('500', 32); x.textAlign = 'right'; x.fillText(fit(x, star(r.aFirst) + r.a, 380), 540, mid);
+        x.textAlign = 'center'; x.fillStyle = SHARE.muted; x.font = F('400', 28); x.fillText('v', 580, mid); x.fillStyle = SHARE.ink;
+        x.textAlign = 'left'; x.font = F('500', 32); x.fillText(fit(x, star(r.bFirst) + r.b, 380), 620, mid);
+      }
+      x.textAlign = 'left';
+    });
+    if (pg.kind === 'empty') { x.font = '500 34px ' + FONT; x.fillStyle = SHARE.muted; x.fillText('Nothing to share yet: draw a round first.', 56, 340); }
+    var foot = SHARE.h - 46;
+    x.font = '400 24px ' + FONT; x.fillStyle = SHARE.muted;
+    if (pg.footnote && pg.page === pg.pages) { x.font = '700 28px ' + FONT; x.fillStyle = SHARE.green; x.fillText(fit(x, pg.footnote, W - 112), 56, foot - 46); x.font = '400 24px ' + FONT; x.fillStyle = SHARE.muted; }
+    x.fillText(fit(x, pg.stamp + (pg.kind === 'pairings' ? '   * = starts' : ''), W - 112), 56, foot);
+    return c;
+  }
+  function shareOpts() { return { initials: !!st.shareInitials, hideSchools: !!st.shareHideSchools, when: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }; }
+  function shareSecs() { return st.printSecs === 'all' ? st.t.sections.map(function (x, i) { return i; }) : [st.sec]; }
+  function sharePageList() {
+    var o = shareOpts(), out = [];
+    shareSecs().forEach(function (si) {
+      PM.sharePages(st.t, si, o).forEach(function (pg) {
+        var round = (/round (\d+)/.exec(pg.heading) || [])[1] || '0';
+        var base = (st.t.lastSavedName || PM.touFileName(st.t.title).replace(/\.TOU$/, '')) + '-' + st.t.sections[si].name.replace(/[^A-Za-z0-9]/g, '') +
+          '-R' + ('0' + round).slice(-2) + '-' + pg.kind + (pg.pages > 1 ? '-' + pg.page + 'of' + pg.pages : '') + '.png';
+        out.push({ page: pg, file: base });
+      });
+    });
+    return out;
+  }
+  function canvasBlob(c) { return new Promise(function (res) { c.toBlob(res, 'image/png'); }); }
+  function sharePreview() {
+    return '<div class="share-grid">' + sharePageList().map(function (it) {
+      return '<figure><img alt="' + esc(it.page.heading) + '" src="' + drawSharePage(it.page).toDataURL('image/png') + '"><figcaption>' + esc(it.file) + '</figcaption></figure>';
+    }).join('') + '</div>';
+  }
+  async function saveShareImages() {
+    var items = sharePageList(), dir = null;
+    if (canFolder) { if (!folder) folder = await idb('get'); try { if (folder && (await folder.queryPermission({ mode: 'readwrite' })) === 'granted') dir = folder; } catch (e) { /* use downloads */ } }
+    if (dir) {
+      try {
+        var sub = await dir.getDirectoryHandle('Share images', { create: true });
+        for (var i = 0; i < items.length; i++) {
+          var w = await (await sub.getFileHandle(items[i].file, { create: true })).createWritable();
+          await w.write(await canvasBlob(drawSharePage(items[i].page))); await w.close();
+        }
+        flash('Saved ' + items.length + ' image' + (items.length === 1 ? '' : 's') + ' in "' + dir.name + '/Share images" ✓');
+        return;
+      } catch (e) { /* fall back to downloads */ }
+    }
+    for (var j = 0; j < items.length; j++) {
+      var blob = await canvasBlob(drawSharePage(items[j].page)), a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = items[j].file; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function (u) { return function () { URL.revokeObjectURL(u); }; }(a.href), 4000);
+    }
+    flash('Downloaded ' + items.length + ' image' + (items.length === 1 ? '' : 's') + ' ✓');
+  }
+  async function shareShareImages() {
+    var items = sharePageList(), files = [];
+    for (var i = 0; i < items.length; i++) files.push(new File([await canvasBlob(drawSharePage(items[i].page))], items[i].file, { type: 'image/png' }));
+    try { await navigator.share({ files: files, title: st.t.title }); } catch (e) { if (e && e.name !== 'AbortError') alert('Sharing did not work here (' + e.message + '). Use "Save images" and send them from your phone or computer.'); }
+  }
+  function copyShareText() {
+    var txt = shareSecs().map(function (si) { return PM.shareText(st.t, si, shareOpts()); }).join('\n\n');
+    var done = function () { flash('Results copied as text ✓ – paste them into a message'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, fallback); else fallback();
+    function fallback() {
+      var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { alert('Copying is blocked here; select the text and copy it yourself:\n\n' + txt.slice(0, 800)); }
+      ta.remove();
+    }
+  }
+  function canWebShare() {
+    try { return !!(navigator.canShare && navigator.canShare({ files: [new File(['x'], 'x.png', { type: 'image/png' })] })); } catch (e) { return false; }
+  }
+
   function renderPrint(main) {
-    var what = [['pairings', 'Pairings'], ['slips', 'Result slips (one per table)'], ['results', 'Results for a round'], ['standings', 'Standings'], ['prizes', 'Prize list'],
+    var what = [['share', 'Share images (WhatsApp, Telegram…)'], ['pairings', 'Pairings'], ['slips', 'Result slips (one per table)'], ['results', 'Results for a round'], ['standings', 'Standings'], ['prizes', 'Prize list'],
       ['scorecards', 'Scorecards (one per player)'], ['wallchart', 'Wall chart'], ['schedule', 'Full schedule (round robin)']];
     var maxR = st.t.sections.reduce(function (m, x) { return Math.max(m, PM.roundsDrawn(x)); }, 0);
     if (st.printRound > maxR) st.printRound = null;
@@ -2518,14 +3029,27 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         '<label title="For a day prize: rank players on these rounds only">Best over rounds</label><input id="pr-from" type="number" min="1" style="width:52px" value="' + (ex.from || '') + '">' +
         '<label>to</label><input id="pr-to" type="number" min="1" style="width:52px" value="' + (ex.to || '') + '">';
     }
+    var sharing = st.printWhat === 'share';
+    if (sharing) roundPick = '<label><input type="checkbox" id="sh-initials"' + (st.shareInitials ? ' checked' : '') + '> First name + initial only</label>' +
+      '<label><input type="checkbox" id="sh-schools"' + (st.shareHideSchools ? ' checked' : '') + '> Hide schools</label>';
     main.innerHTML = '<div class="card"><h2>Print</h2><div class="row"><select id="pr-what">' +
       what.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === st.printWhat ? ' selected' : '') + '>' + w[1] + '</option>'; }).join('') +
       '</select><select id="pr-secs"><option value="all"' + (st.printSecs === 'all' ? ' selected' : '') + '>All divisions (one per page)</option><option value="one"' +
       (st.printSecs === 'one' ? ' selected' : '') + '>Division ' + esc(sec().name) + ' only</option></select>' + roundPick +
-      '<button id="pr-go" class="primary">Print…</button></div>' +
+      (sharing ? '<button id="sh-save" class="primary">Save images</button>' + (canWebShare() ? '<button id="sh-share">Share…</button>' : '') +
+        '<button id="sh-text">Copy as text</button></div><p class="hint">Pictures of the latest standings, round results and next pairings, ' +
+        'sized for phones (1080 × 1350, at most 15 rows each). They are made on this computer; nothing is sent anywhere until you send them yourself. ' +
+        'With a save folder, they go into its "Share images" folder; otherwise they are downloaded.</p>' : '<button id="pr-go" class="primary">Print…</button></div>') +
       '<details><summary class="hint">Tools</summary><p class="hint">Before sending the .TOU file to the ratings officer, remove table markers like @12, @R and (N) from names.</p>' +
       '<button id="pr-clean" class="small">Clean markers from all names</button></details></div>' +
-      '<div class="preview" id="pr-preview">' + buildPrint() + '</div>';
+      '<div class="preview" id="pr-preview">' + (sharing ? sharePreview() : buildPrint()) + '</div>';
+    if (sharing) {
+      $('sh-initials').onchange = function () { st.shareInitials = this.checked; render(); };
+      $('sh-schools').onchange = function () { st.shareHideSchools = this.checked; render(); };
+      $('sh-save').onclick = saveShareImages;
+      if ($('sh-share')) $('sh-share').onclick = shareShareImages;
+      $('sh-text').onclick = copyShareText;
+    }
     $('pr-what').onchange = function () { st.printWhat = this.value; render(); };
     $('pr-secs').onchange = function () { st.printSecs = this.value; render(); };
     if ($('pr-round')) $('pr-round').onchange = function () { st.printRound = +this.value || null; render(); };
@@ -2537,7 +3061,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     });
     if ($('pr-places')) $('pr-places').onchange = function () { sec().prizes = Math.max(1, Math.min(50, parseInt(this.value, 10) || 3)); changed(); };
     if ($('pr-stand')) $('pr-stand').onchange = function () { st.printWithStandings = this.checked; render(); };
-    $('pr-go').onclick = function () {
+    if ($('pr-go')) $('pr-go').onclick = function () {
       $('print-area').innerHTML = buildPrint();
       var land = null;
       if (st.printWhat === 'wallchart') { land = document.createElement('style'); land.textContent = '@page { size: landscape; }'; document.head.appendChild(land); }
