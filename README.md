@@ -48,6 +48,9 @@ up to 500 players and 60-player, 59-round events.
 
 ## Versions
 
+- **1.2.1**: Gibsonization fix: when too few players are out of the prizes, Gibsonized players now play each other
+  (as TSH does) instead of meeting a player still racing for a prize; in an odd field the next Gibsonized player
+  now gets the highest-ranked non-contender.
 - **1.2**: practice mode for new directors; `.pairmaster` event file and automatic backup after each round;
   forfeits (WESPA Rule 2.3.6) with spread cap and bye-spread settings; jump to a game, typo guard and who-is-missing list;
   class prizes, tuff luck, lucky stiff, highest average and day prizes; result slips; projector view; 1st–2nd counts in

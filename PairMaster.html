@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-El9Q82WkLdo3cxcjCqBG2esrITAv8/jaeI8Tnnp8IUc='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-A7rjE3/qtj7HYE6iTh8SAZiEzWvwJieAzeK7xQDGlI4='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>PairMaster</title>
 <style>
 :root {
@@ -122,7 +122,7 @@ body.practicing .topbar { box-shadow: inset 0 -4px 0 #f0a020; }
 </head>
 <body>
 <header class="topbar no-print">
-  <div class="brand">PairMaster <span class="version">1.2</span></div>
+  <div class="brand">PairMaster <span class="version">1.2.1</span></div>
   <div class="event" id="event-label"></div>
   <div class="spacer"></div>
   <span class="saved" id="saved-label"></span>
@@ -943,13 +943,13 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     if (opts.gibson && useRanks && (method === 'australian' || method === 'lagged' || method === 'koth') && PM.gibsonPlan) {
       var plan = PM.gibsonPlan(t, sec, round, opts.gibson, standRound, fresh);
       var gibs = plan.gibsons.filter(function (g) { return g.selected && isActive[g.idx]; });
-      if (gibs.length && order.length % 2 === 1) {
-        var gb = gibs.shift();
-        PM.setNongame(sec, round, gb.idx, 'W');
-        order.splice(order.indexOf(gb.idx), 1);
-      }
       gibs.forEach(function (g) {
-        if (g.opp === null || order.indexOf(g.idx) < 0 || order.indexOf(g.opp) < 0) return;
+        if (!g.bye || order.indexOf(g.idx) < 0) return;
+        PM.setNongame(sec, round, g.idx, 'W');
+        order.splice(order.indexOf(g.idx), 1);
+      });
+      gibs.forEach(function (g) {
+        if (g.bye || g.opp === null || order.indexOf(g.idx) < 0 || order.indexOf(g.opp) < 0) return; // a Gibson v Gibson pair is added once
         gibPairs.push([g.idx, g.opp]);
         order.splice(order.indexOf(g.idx), 1);
         order.splice(order.indexOf(g.opp), 1);
@@ -1067,7 +1067,11 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   ];
 
   // cfg: { totalRounds, prizes, mode: 'off'|'first'|'decided', players?: [idx] (ticked; default all) }
-  // Returns { remaining, gibsons: [{idx, place, selected, opp}], outOfPrizes: [idx] } in rank order.
+  // Returns { remaining, gibsons: [{idx, place, selected, opp, bye}], outOfPrizes: [idx] } in rank order.
+  // In an odd field the top ticked Gibsonized player takes the bye (bye: true). The others each meet the
+  // highest-ranked player out of the prizes; if there aren't enough of those, the Gibsonized players play
+  // each other (1st v 2nd ..., as tsh does) and an odd one out takes the top non-contender, so nobody still
+  // racing for a prize meets a Gibsonized player while that can be avoided.
   PM.gibsonPlan = function (t, sec, round, cfg, standRound, freshStart) {
     var res = { remaining: 0, gibsons: [], outOfPrizes: [] };
     if (standRound === undefined || standRound === null) standRound = round - 1;
@@ -1106,13 +1110,27 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     });
 
     var met = PM._meetings(sec, freshStart || 1, round - 1), used = {};
-    res.gibsons.forEach(function (g) {
-      if (!g.selected) return;
+    var need = res.gibsons.filter(function (g) { return g.selected; });
+    var active = sec.players.filter(function (pl) { return !pl.missing; }).length;
+    if (need.length && active % 2 === 1) { need[0].bye = true; need = need.slice(1); }
+    function nonContender(g) {
       var free = res.outOfPrizes.filter(function (y) { return !used[y]; });
       var pick = free.filter(function (y) { return met(g.idx, y) === 0; })[0];
       if (pick === undefined) pick = free[0];
       if (pick !== undefined) { g.opp = pick; used[pick] = true; }
-    });
+    }
+    if (res.outOfPrizes.length >= need.length) need.forEach(nonContender);
+    else {
+      // Not enough non-contenders: Gibsonized players meet each other, nearest first, avoiding a rematch if possible.
+      var left = need.slice();
+      while (left.length >= 2) {
+        var a = left.shift(), k = 0;
+        while (k < left.length - 1 && met(a.idx, left[k].idx) > 0) k++;
+        var b = left.splice(k, 1)[0];
+        a.opp = b.idx; b.opp = a.idx;
+      }
+      if (left.length) nonContender(left[0]);
+    }
     return res;
   };
 })(PM);
@@ -1441,7 +1459,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   var FORMAT = 'PairMaster event', FORMAT_VERSION = 1;
   var SKIP = { lastSavedName: true, lastBackupRounds: true };
 
-  PM.APP_VERSION = '1.2'; // filled in by build.py
+  PM.APP_VERSION = '1.2.1'; // filled in by build.py
 
   PM.writeEvent = function (t) {
     var copy = JSON.parse(JSON.stringify(t, function (k, v) { return SKIP[k] ? undefined : v; }));
@@ -1999,17 +2017,18 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
         var plan = PM.gibsonPlan(st.t, s, nextR, cfg, standRound, draft.freshStart);
         var sel = gibsonSelected(s, plan);
         plan = PM.gibsonPlan(st.t, s, nextR, { totalRounds: cfg.totalRounds, prizes: cfg.prizes, mode: cfg.mode, players: sel }, standRound, draft.freshStart);
-        var active = s.players.filter(function (pl) { return !pl.missing; }).length;
-        var byeTaken = active % 2 === 1;
+
         if (!plan.remaining) h += '<p class="hint">No rounds left after this one to Gibsonize for.</p>';
         else if (!plan.gibsons.length) h += '<p class="hint">Nobody has clinched yet (' + plan.remaining + ' game' + (plan.remaining === 1 ? '' : 's') + ' left including this one, judged on wins).</p>';
         else {
           h += '<p class="hint">Clinched (' + plan.remaining + ' game' + (plan.remaining === 1 ? '' : 's') + ' left). Untick anyone you don\'t want Gibsonized:</p>';
           plan.gibsons.forEach(function (g) {
             var what;
+            var gibOpp = g.opp !== null && plan.gibsons.some(function (o) { return o.idx === g.opp; });
             if (!g.selected) what = 'drawn normally';
-            else if (byeTaken) { what = 'takes the bye (odd number of players)'; byeTaken = false; }
-            else if (g.opp === null) what = 'nobody is out of the prizes yet, so drawn normally';
+            else if (g.bye) what = 'takes the bye (odd number of players)';
+            else if (g.opp === null) what = 'nobody is free out of the prizes, so drawn normally';
+            else if (gibOpp) what = 'will play <b>' + nm(s, g.opp) + '</b> (also Gibsonized: too few players are out of the prizes)';
             else what = 'will play <b>' + nm(s, g.opp) + '</b> (highest-ranked player out of the prizes)';
             h += '<div class="row"><label><input type="checkbox" data-gib="' + g.idx + '"' + (g.selected ? ' checked' : '') + '> <b>' +
               nm(s, g.idx) + '</b> has clinched ' + ordinal(g.place) + ' place</label><span class="hint">– ' + what + '</span></div>';
