@@ -50,6 +50,7 @@ up to 500 players and 60-player, 59-round events.
 
 ## Versions
 
+- **1.3.2**: a mistyped rating (for example 1650.5) now keeps the player's previous rating instead of clearing it.
 - **1.3.1**: the projector view shows the playoff final: the score while it is played, then the result and who wins
   the title, under the title on every page.
 - **1.3**: share images for WhatsApp/Telegram, made for phones, with privacy options and a text version (all offline);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-IGKCtti9CEqN05JlDmDzAUQM19ABDBg3jUD3b1cfSFw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-PyUq5VvdMppO9P5A8tS21AwH2jsGeP6WkPHFQI/38Ec='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>PairMaster</title>
 <style>
 :root {
@@ -127,7 +127,7 @@ body.board .board-playoff { margin: 0 0 18px; font-size: 30px; font-weight: 700;
 </head>
 <body>
 <header class="topbar no-print">
-  <div class="brand">PairMaster <span class="version">1.3.1</span></div>
+  <div class="brand">PairMaster <span class="version">1.3.2</span></div>
   <div class="event" id="event-label"></div>
   <div class="spacer"></div>
   <span class="saved" id="saved-label"></span>
@@ -482,6 +482,13 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
 
   // Ratings are optional, always: a blank, "unrated" or odd-looking rating just means the player is unrated.
   PM.ratingOf = function (pl) { return Number.isInteger(pl && pl.rating) && pl.rating > 0 ? pl.rating : null; };
+
+  // What was typed in a rating box: a rating (1 to 4 digits), empty (= unrated) or a typo to reject.
+  PM.ratingInput = function (text) {
+    var v = String(text === undefined || text === null ? '' : text).trim();
+    if (!v) return { valid: true, rating: null };
+    return /^\d{1,4}$/.test(v) && +v > 0 ? { valid: true, rating: +v } : { valid: false, rating: null };
+  };
 
   // One pasted line: "Name, rest..." split on commas or tabs (when any extra columns are switched on).
   // With ratings on, the first 3-4 digit number after the name is the rating; other fields fill school, then class.
@@ -1544,7 +1551,7 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
   var FORMAT = 'PairMaster event', FORMAT_VERSION = 1;
   var SKIP = { lastSavedName: true, lastBackupRounds: true };
 
-  PM.APP_VERSION = '1.3.1'; // filled in by build.py
+  PM.APP_VERSION = '1.3.2'; // filled in by build.py
 
   PM.writeEvent = function (t) {
     var copy = JSON.parse(JSON.stringify(t, function (k, v) { return SKIP[k] ? undefined : v; }));
@@ -2228,9 +2235,13 @@ var PM = (typeof PM !== 'undefined') ? PM : {};
     };
     main.querySelectorAll('[data-rating]').forEach(function (inp) {
       inp.onchange = function () {
-        var pl = s.players[+this.dataset.rating], r = ratingFrom(this.value);
-        if (this.value.trim() && r === null) alert('A rating is a number such as 1650. Leave it empty for an unrated player.');
-        if (r === null) delete pl.rating; else pl.rating = r;
+        var pl = s.players[+this.dataset.rating], typed = PM.ratingInput(this.value);
+        if (!typed.valid) { // a typo: keep the rating the player had, as the score boxes do
+          alert('A rating is a number such as 1650. Leave it empty for an unrated player.');
+          this.value = PM.ratingOf(pl) || ''; this.select();
+          return;
+        }
+        if (typed.rating === null) delete pl.rating; else pl.rating = typed.rating;
         changed();
       };
     });
